@@ -1,15 +1,15 @@
 """State Manager - All persistence to .claude-task-master/ directory."""
 
-from pathlib import Path
-from typing import Optional, Literal
-from datetime import datetime
-import json
 import fcntl
+import json
 import shutil
 import tempfile
 from contextlib import contextmanager
-from pydantic import BaseModel, ValidationError
+from datetime import datetime
+from pathlib import Path
+from typing import Literal
 
+from pydantic import BaseModel, ValidationError
 
 # =============================================================================
 # Custom Exception Classes
@@ -19,7 +19,7 @@ from pydantic import BaseModel, ValidationError
 class StateError(Exception):
     """Base exception for all state-related errors."""
 
-    def __init__(self, message: str, details: Optional[str] = None):
+    def __init__(self, message: str, details: str | None = None):
         self.message = message
         self.details = details
         super().__init__(self._format_message())
@@ -56,7 +56,7 @@ class StateCorruptedError(StateError):
 class StateValidationError(StateError):
     """Raised when state data fails validation."""
 
-    def __init__(self, message: str, missing_fields: Optional[list[str]] = None, invalid_fields: Optional[list[str]] = None):
+    def __init__(self, message: str, missing_fields: list[str] | None = None, invalid_fields: list[str] | None = None):
         self.missing_fields = missing_fields or []
         self.invalid_fields = invalid_fields or []
 
@@ -112,10 +112,10 @@ class StateResumeValidationError(StateError):
     def __init__(
         self,
         reason: str,
-        status: Optional[str] = None,
-        current_task_index: Optional[int] = None,
-        total_tasks: Optional[int] = None,
-        suggestion: Optional[str] = None,
+        status: str | None = None,
+        current_task_index: int | None = None,
+        total_tasks: int | None = None,
+        suggestion: str | None = None,
     ):
         self.reason = reason
         self.status = status
@@ -172,7 +172,7 @@ class TaskOptions(BaseModel):
     """Options for task execution."""
 
     auto_merge: bool = True
-    max_sessions: Optional[int] = None
+    max_sessions: int | None = None
     pause_on_pr: bool = False
 
 
@@ -186,7 +186,7 @@ class TaskState(BaseModel):
     status: StatusType  # planning|working|blocked|paused|success|failed
     current_task_index: int = 0
     session_count: int = 0
-    current_pr: Optional[int] = None
+    current_pr: int | None = None
     created_at: str
     updated_at: str
     run_id: str
@@ -230,7 +230,7 @@ def file_lock(lock_path: Path, timeout: float = 5.0, exclusive: bool = True):
                 break
             except BlockingIOError:
                 if time.time() - start_time > timeout:
-                    raise StateLockError(lock_path, timeout)
+                    raise StateLockError(lock_path, timeout) from None
                 time.sleep(0.1)
 
         yield lock_file
@@ -254,7 +254,7 @@ class StateManager:
     STATE_DIR = Path(".claude-task-master")
     LOCK_TIMEOUT = 5.0  # seconds
 
-    def __init__(self, state_dir: Optional[Path] = None):
+    def __init__(self, state_dir: Path | None = None):
         """Initialize state manager."""
         self.state_dir = state_dir or self.STATE_DIR
         self.logs_dir = self.state_dir / "logs"
@@ -457,7 +457,7 @@ class StateManager:
                 pass
             raise
 
-    def _attempt_recovery(self, original_error: Exception) -> Optional[TaskState]:
+    def _attempt_recovery(self, original_error: Exception) -> TaskState | None:
         """Attempt to recover state from backup.
 
         Args:
@@ -491,7 +491,7 @@ class StateManager:
 
         return None
 
-    def _create_backup(self, file_path: Path, suffix: str = "") -> Optional[Path]:
+    def _create_backup(self, file_path: Path, suffix: str = "") -> Path | None:
         """Create a backup of a file.
 
         Args:
@@ -514,7 +514,7 @@ class StateManager:
         except Exception:
             return None
 
-    def create_state_backup(self) -> Optional[Path]:
+    def create_state_backup(self) -> Path | None:
         """Create a backup of the current state file.
 
         Returns:
@@ -537,7 +537,7 @@ class StateManager:
         criteria_file = self.state_dir / "criteria.txt"
         criteria_file.write_text(criteria)
 
-    def load_criteria(self) -> Optional[str]:
+    def load_criteria(self) -> str | None:
         """Load success criteria from criteria.txt."""
         criteria_file = self.state_dir / "criteria.txt"
         if criteria_file.exists():
@@ -549,7 +549,7 @@ class StateManager:
         plan_file = self.state_dir / "plan.md"
         plan_file.write_text(plan)
 
-    def load_plan(self) -> Optional[str]:
+    def load_plan(self) -> str | None:
         """Load task plan from plan.md."""
         plan_file = self.state_dir / "plan.md"
         if plan_file.exists():
@@ -561,7 +561,7 @@ class StateManager:
         progress_file = self.state_dir / "progress.md"
         progress_file.write_text(progress)
 
-    def load_progress(self) -> Optional[str]:
+    def load_progress(self) -> str | None:
         """Load progress summary from progress.md."""
         progress_file = self.state_dir / "progress.md"
         if progress_file.exists():
@@ -588,7 +588,7 @@ class StateManager:
         """Check if state directory exists."""
         return self.state_dir.exists() and (self.state_dir / "state.json").exists()
 
-    def validate_for_resume(self, state: Optional[TaskState] = None) -> TaskState:
+    def validate_for_resume(self, state: TaskState | None = None) -> TaskState:
         """Validate that state is valid for resumption.
 
         This method performs comprehensive validation to ensure a task

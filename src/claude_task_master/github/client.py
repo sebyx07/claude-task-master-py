@@ -2,7 +2,8 @@
 
 import json
 import subprocess
-from typing import Any, Optional
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -31,14 +32,14 @@ class GitHubClient:
                 capture_output=True,
                 text=True,
             )
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as e:
             raise RuntimeError(
                 "gh CLI not authenticated. Run 'gh auth login' first."
-            )
-        except FileNotFoundError:
+            ) from e
+        except FileNotFoundError as e:
             raise RuntimeError(
                 "gh CLI not installed. Install from https://cli.github.com/"
-            )
+            ) from e
 
     def create_pr(
         self, title: str, body: str, base: str = "main"

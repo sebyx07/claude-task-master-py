@@ -1,12 +1,11 @@
 """Credential Manager - OAuth credential loading, validation, and refresh."""
 
-from pathlib import Path
-from typing import Optional
-from datetime import datetime
 import json
+from datetime import datetime
+from pathlib import Path
+
 import httpx
 from pydantic import BaseModel, ValidationError
-
 
 # =============================================================================
 # Custom Exception Classes
@@ -16,7 +15,7 @@ from pydantic import BaseModel, ValidationError
 class CredentialError(Exception):
     """Base exception for all credential-related errors."""
 
-    def __init__(self, message: str, details: Optional[str] = None):
+    def __init__(self, message: str, details: str | None = None):
         self.message = message
         self.details = details
         super().__init__(self._format_message())
@@ -41,7 +40,7 @@ class CredentialNotFoundError(CredentialError):
 class InvalidCredentialsError(CredentialError):
     """Raised when credentials are malformed or invalid."""
 
-    def __init__(self, message: str, details: Optional[str] = None):
+    def __init__(self, message: str, details: str | None = None):
         super().__init__(message, details)
 
 
@@ -61,7 +60,7 @@ class CredentialPermissionError(CredentialError):
 class TokenRefreshError(CredentialError):
     """Raised when token refresh fails."""
 
-    def __init__(self, message: str, details: Optional[str] = None, status_code: Optional[int] = None):
+    def __init__(self, message: str, details: str | None = None, status_code: int | None = None):
         self.status_code = status_code
         super().__init__(message, details)
 
@@ -93,7 +92,7 @@ class NetworkConnectionError(TokenRefreshError):
 class TokenRefreshHTTPError(TokenRefreshError):
     """Raised when the token refresh endpoint returns an HTTP error."""
 
-    def __init__(self, status_code: int, response_body: Optional[str] = None):
+    def __init__(self, status_code: int, response_body: str | None = None):
         self.response_body = response_body
         error_messages = {
             400: "Bad request - the refresh token may be malformed",
@@ -113,7 +112,7 @@ class TokenRefreshHTTPError(TokenRefreshError):
 class InvalidTokenResponseError(TokenRefreshError):
     """Raised when the token refresh response is invalid or malformed."""
 
-    def __init__(self, message: str, response_data: Optional[dict] = None):
+    def __init__(self, message: str, response_data: dict | None = None):
         self.response_data = response_data
         details = f"Received response: {response_data}" if response_data else None
         super().__init__(message, details)

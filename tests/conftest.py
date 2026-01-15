@@ -1,14 +1,15 @@
 """Pytest configuration and fixtures for claude-task-master tests."""
 
 import json
-import pytest
+import time
+from collections.abc import Generator
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from datetime import datetime, timedelta
-from typing import Any, Generator
-from unittest.mock import MagicMock, AsyncMock, patch
-import time
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # =============================================================================
 # Directory and File Fixtures
@@ -554,7 +555,6 @@ def pytest_collection_modifyitems(config, items):
 def cleanup_env(monkeypatch):
     """Clean up environment variables after each test."""
     # Store original environment
-    original_env = dict()
 
     yield
 
@@ -564,7 +564,7 @@ def cleanup_env(monkeypatch):
 @pytest.fixture
 def isolated_filesystem(temp_dir: Path, monkeypatch):
     """Provide an isolated filesystem for tests that need to change cwd."""
-    original_cwd = Path.cwd()
+    Path.cwd()
     monkeypatch.chdir(temp_dir)
     yield temp_dir
     # monkeypatch automatically restores cwd

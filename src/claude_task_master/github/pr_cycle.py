@@ -1,10 +1,10 @@
 """PR Cycle Manager - Handles create → CI wait → address comments → merge cycle."""
 
 import time
-from typing import Optional
-from .client import GitHubClient, PRStatus
-from ..core.state import StateManager, TaskState
+
 from ..core.agent import AgentWrapper
+from ..core.state import StateManager, TaskState
+from .client import GitHubClient, PRStatus
 
 
 class PRCycleManager:
@@ -110,7 +110,7 @@ class PRCycleManager:
         context = self.state_manager.load_context()
 
         # Run agent to address the issue
-        result = self.agent.run_work_session(
+        self.agent.run_work_session(
             task_description=issue_description,
             context=context,
         )

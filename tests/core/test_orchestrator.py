@@ -1,25 +1,22 @@
 """Comprehensive tests for the orchestrator module."""
 
-import pytest
-import json
-from unittest.mock import MagicMock, patch, PropertyMock
-from pathlib import Path
 
+import pytest
+
+from claude_task_master.core.agent import AgentError, QueryExecutionError
 from claude_task_master.core.orchestrator import (
-    WorkLoopOrchestrator,
-    OrchestratorError,
-    PlanParsingError,
+    MaxSessionsReachedError,
     NoPlanFoundError,
     NoTasksFoundError,
-    TaskIndexOutOfBoundsError,
-    WorkSessionError,
+    OrchestratorError,
+    PlanParsingError,
     StateRecoveryError,
-    MaxSessionsReachedError,
+    TaskIndexOutOfBoundsError,
     VerificationFailedError,
+    WorkLoopOrchestrator,
+    WorkSessionError,
 )
-from claude_task_master.core.state import StateManager, TaskState, TaskOptions, StateError
-from claude_task_master.core.agent import AgentError, QueryExecutionError
-
+from claude_task_master.core.state import StateManager, TaskOptions
 
 # =============================================================================
 # WorkLoopOrchestrator Initialization Tests
@@ -1412,7 +1409,7 @@ class TestRunErrorHandling:
         # Check that a backup was created
         backup_dir = state_manager.backup_dir
         if backup_dir.exists():
-            backups = list(backup_dir.glob("state.*.json"))
+            list(backup_dir.glob("state.*.json"))
             # Backup may or may not exist depending on timing
             # The important thing is the method didn't crash
 
@@ -1438,7 +1435,7 @@ class TestRunErrorHandling:
             planner=planner,
         )
 
-        result = orchestrator.run()
+        orchestrator.run()
 
         captured = capsys.readouterr()
         # Should include debugging info

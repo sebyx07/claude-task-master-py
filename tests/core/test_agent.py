@@ -1,27 +1,25 @@
 """Comprehensive tests for the agent module."""
 
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
-from pathlib import Path
-import asyncio
 import os
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from claude_task_master.core.agent import (
-    AgentWrapper,
-    ModelType,
-    ToolConfig,
     AgentError,
+    AgentWrapper,
+    APIAuthenticationError,
+    APIConnectionError,
+    APIRateLimitError,
+    APIServerError,
+    APITimeoutError,
+    ModelType,
+    QueryExecutionError,
     SDKImportError,
     SDKInitializationError,
-    QueryExecutionError,
-    APIRateLimitError,
-    APIConnectionError,
-    APITimeoutError,
-    APIAuthenticationError,
-    APIServerError,
+    ToolConfig,
     WorkingDirectoryError,
 )
-
 
 # =============================================================================
 # Exception Class Tests

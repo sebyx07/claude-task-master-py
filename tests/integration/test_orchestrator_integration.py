@@ -5,24 +5,14 @@ including task execution, state transitions, and error handling at a higher
 level than unit tests.
 """
 
-import json
-import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
-from datetime import datetime
+from unittest.mock import MagicMock
 
-from claude_task_master.core.state import StateManager, TaskState, TaskOptions
 from claude_task_master.core.orchestrator import (
     WorkLoopOrchestrator,
-    OrchestratorError,
-    NoPlanFoundError,
-    NoTasksFoundError,
-    WorkSessionError,
-    MaxSessionsReachedError,
-    TaskIndexOutOfBoundsError,
 )
 from claude_task_master.core.planner import Planner
-
+from claude_task_master.core.state import StateManager, TaskOptions
 
 # =============================================================================
 # Orchestrator Integration Tests
@@ -501,6 +491,6 @@ class TestOrchestratorStateRecovery:
         orchestrator = WorkLoopOrchestrator(mock_agent_wrapper, state_manager, planner)
 
         # Verify recovery method exists and works
-        recovery_result = orchestrator._attempt_state_recovery()
+        orchestrator._attempt_state_recovery()
         # Either returns state or None (depending on backup availability)
         # The method should not raise

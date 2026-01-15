@@ -8,18 +8,16 @@ These tests verify the complete workflow from start to finish, including:
 """
 
 import json
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
-from typer.testing import CliRunner
 from datetime import datetime
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+from typer.testing import CliRunner
 
 from claude_task_master.cli import app
-from claude_task_master.core.state import StateManager, TaskState, TaskOptions
 from claude_task_master.core.credentials import CredentialManager
-from claude_task_master.core.orchestrator import WorkLoopOrchestrator
-from claude_task_master.core.planner import Planner
-
+from claude_task_master.core.state import StateManager
 
 # =============================================================================
 # CLI Test Runner Fixture
@@ -140,7 +138,7 @@ class TestStartCommandWorkflow:
             patched_sdk.set_work_response("Completed.")
             patched_sdk.set_verify_response("Success!")
 
-            result = runner.invoke(
+            runner.invoke(
                 app,
                 ["start", f"Test with {model}", "--model", model]
             )
@@ -171,7 +169,7 @@ class TestStartCommandWorkflow:
 ## Success Criteria
 1. Done
 """)
-        result = runner.invoke(
+        runner.invoke(
             app,
             [
                 "start", "Test with options",
@@ -317,13 +315,13 @@ class TestResumeCommandWorkflow:
         monkeypatch.setattr(CredentialManager, "CREDENTIALS_PATH", mock_credentials_file)
 
         # Record the original task index
-        original_index = paused_state["state_data"]["current_task_index"]
+        paused_state["state_data"]["current_task_index"]
         original_session = paused_state["state_data"]["session_count"]
 
         patched_sdk.set_work_response("Completed successfully.")
         patched_sdk.set_verify_response("All criteria met!")
 
-        result = runner.invoke(app, ["resume"])
+        runner.invoke(app, ["resume"])
 
         # After resume, check that we started from the right place
         state_file = integration_state_dir / "state.json"
@@ -641,7 +639,7 @@ class TestStateTransitions:
         patched_sdk.set_work_response("Completed.")
         patched_sdk.set_verify_response("Success!")
 
-        result = runner.invoke(app, ["start", "Test goal"])
+        runner.invoke(app, ["start", "Test goal"])
 
         # Check state file for working status (or success if completed)
         state_file = integration_state_dir / "state.json"
@@ -672,7 +670,7 @@ class TestStateTransitions:
         patched_sdk.set_work_response("Completed.")
         patched_sdk.set_verify_response("Success!")
 
-        result = runner.invoke(app, ["resume"])
+        runner.invoke(app, ["resume"])
 
         # After resume, status should no longer be paused
         state_file = integration_state_dir / "state.json"
@@ -1026,7 +1024,7 @@ All success criteria have been met!
         patched_sdk.set_work_response("Task done.")
         patched_sdk.set_verify_response("All success criteria met!")
 
-        result = runner.invoke(
+        runner.invoke(
             app,
             ["start", "Test max sessions", "--model", "sonnet", "--max-sessions", "10"]
         )
@@ -1142,7 +1140,7 @@ All success criteria have been met!
         patched_sdk.set_work_response("Done.")
         patched_sdk.set_verify_response("All criteria met!")
 
-        result = runner.invoke(
+        runner.invoke(
             app,
             [
                 "start", "Test options preservation",
@@ -1238,7 +1236,7 @@ This goal requires no tasks - everything is already done.
             patched_sdk.set_work_response("Completed.")
             patched_sdk.set_verify_response("All criteria met!")
 
-            result = runner.invoke(
+            runner.invoke(
                 app,
                 ["start", f"Test with {model} model", "--model", model]
             )

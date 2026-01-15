@@ -1,12 +1,10 @@
 """Comprehensive tests for the planner module."""
 
+
 import pytest
-from unittest.mock import MagicMock, patch
-from pathlib import Path
 
 from claude_task_master.core.planner import Planner
-from claude_task_master.core.state import StateManager, TaskOptions
-
+from claude_task_master.core.state import StateManager
 
 # =============================================================================
 # Planner Initialization Tests
@@ -509,7 +507,7 @@ class TestPlannerEdgeCases:
         }
 
         state_manager.state_dir.mkdir(exist_ok=True)
-        result = planner.create_plan("Test goal")
+        planner.create_plan("Test goal")
 
         # Whitespace-only is truthy, so it will be saved
         loaded_plan = state_manager.load_plan()
@@ -728,7 +726,7 @@ class TestPlannerPlanContent:
         }
 
         state_manager.state_dir.mkdir(exist_ok=True)
-        result = planner.create_plan("Build feature")
+        planner.create_plan("Build feature")
 
         loaded_plan = state_manager.load_plan()
         assert "## Task List" in loaded_plan
@@ -758,7 +756,7 @@ Additional information here.
         }
 
         state_manager.state_dir.mkdir(exist_ok=True)
-        result = planner.create_plan("Nested task goal")
+        planner.create_plan("Nested task goal")
 
         loaded_plan = state_manager.load_plan()
         assert "Main Task 1" in loaded_plan
@@ -786,7 +784,7 @@ All tasks done.
         }
 
         state_manager.state_dir.mkdir(exist_ok=True)
-        result = planner.create_plan("Resume work")
+        planner.create_plan("Resume work")
 
         loaded_plan = state_manager.load_plan()
         assert "- [x]" in loaded_plan

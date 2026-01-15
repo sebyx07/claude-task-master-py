@@ -1,10 +1,9 @@
 """Work Loop Orchestrator - Main loop driving work sessions until completion."""
 
-from typing import Optional
-from .agent import AgentWrapper, AgentError
-from .state import StateManager, TaskState, StateError
-from .planner import Planner
 
+from .agent import AgentError, AgentWrapper
+from .planner import Planner
+from .state import StateError, StateManager, TaskState
 
 # =============================================================================
 # Custom Exception Classes
@@ -14,7 +13,7 @@ from .planner import Planner
 class OrchestratorError(Exception):
     """Base exception for all orchestrator-related errors."""
 
-    def __init__(self, message: str, details: Optional[str] = None):
+    def __init__(self, message: str, details: str | None = None):
         self.message = message
         self.details = details
         super().__init__(self._format_message())
@@ -28,7 +27,7 @@ class OrchestratorError(Exception):
 class PlanParsingError(OrchestratorError):
     """Raised when plan parsing fails."""
 
-    def __init__(self, message: str, plan_content: Optional[str] = None):
+    def __init__(self, message: str, plan_content: str | None = None):
         self.plan_content = plan_content
         details = None
         if plan_content:
@@ -51,7 +50,7 @@ class NoPlanFoundError(OrchestratorError):
 class NoTasksFoundError(PlanParsingError):
     """Raised when the plan contains no tasks."""
 
-    def __init__(self, plan_content: Optional[str] = None):
+    def __init__(self, plan_content: str | None = None):
         super().__init__(
             "No tasks found in plan",
             plan_content,
@@ -86,7 +85,7 @@ class WorkSessionError(OrchestratorError):
 class StateRecoveryError(OrchestratorError):
     """Raised when state recovery fails."""
 
-    def __init__(self, reason: str, original_error: Optional[Exception] = None):
+    def __init__(self, reason: str, original_error: Exception | None = None):
         self.original_error = original_error
         details = f"Reason: {reason}"
         if original_error:
@@ -112,7 +111,7 @@ class MaxSessionsReachedError(OrchestratorError):
 class VerificationFailedError(OrchestratorError):
     """Raised when success criteria verification fails."""
 
-    def __init__(self, criteria: str, details: Optional[str] = None):
+    def __init__(self, criteria: str, details: str | None = None):
         self.criteria = criteria
         super().__init__(
             "Success criteria verification failed",
@@ -226,7 +225,7 @@ class WorkLoopOrchestrator:
                     print("✓ All tasks completed successfully!")
                     return 0  # Success
                 else:
-                    criteria = self.state_manager.load_criteria() or "unknown"
+                    self.state_manager.load_criteria() or "unknown"
                     print("⚠️  Success criteria verification failed")
                     state.status = "blocked"
                     self.state_manager.save_state(state)
@@ -292,7 +291,7 @@ class WorkLoopOrchestrator:
 
             return 1  # Error
 
-    def _attempt_state_recovery(self) -> Optional[TaskState]:
+    def _attempt_state_recovery(self) -> TaskState | None:
         """Attempt to recover state from backup.
 
         Returns:

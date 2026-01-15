@@ -1,7 +1,8 @@
 """Doctor command - Check system requirements and authentication."""
 
-from pathlib import Path
 import subprocess
+from pathlib import Path
+
 from rich.console import Console
 
 

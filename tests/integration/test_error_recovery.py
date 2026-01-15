@@ -9,30 +9,19 @@ error conditions, including:
 """
 
 import json
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock, AsyncMock
-from typer.testing import CliRunner
 from datetime import datetime
+from pathlib import Path
+
+import pytest
+from typer.testing import CliRunner
 
 from claude_task_master.cli import app
-from claude_task_master.core.state import StateManager, TaskState, TaskOptions
-from claude_task_master.core.credentials import CredentialManager
-from claude_task_master.core.orchestrator import (
-    WorkLoopOrchestrator,
-    MaxSessionsReachedError,
-    NoPlanFoundError,
-    WorkSessionError,
-)
 from claude_task_master.core.agent import (
     AgentWrapper,
-    AgentError,
     APIRateLimitError,
-    APITimeoutError,
-    APIConnectionError,
-    APIAuthenticationError,
 )
-
+from claude_task_master.core.credentials import CredentialManager
+from claude_task_master.core.state import StateManager, TaskOptions
 
 # =============================================================================
 # CLI Test Runner Fixture
@@ -62,7 +51,7 @@ class TestSDKErrorRecovery:
         monkeypatch,
     ):
         """Test that rate limit errors trigger retry logic."""
-        from claude_task_master.core.agent import AgentWrapper, ModelType
+        from claude_task_master.core.agent import ModelType
 
         monkeypatch.chdir(integration_temp_dir)
 
@@ -174,14 +163,14 @@ class TestStateCorruptionRecovery:
         monkeypatch,
     ):
         """Test that backup is restored when state file is corrupted."""
-        from claude_task_master.core.state import StateManager, TaskOptions
+        from claude_task_master.core.state import StateManager
 
         monkeypatch.chdir(integration_temp_dir)
 
         # Create a valid state first
         state_manager = StateManager(integration_state_dir)
         options = TaskOptions(auto_merge=True)
-        state = state_manager.initialize(goal="Test goal", model="sonnet", options=options)
+        state_manager.initialize(goal="Test goal", model="sonnet", options=options)
 
         # Create a backup
         backup_path = state_manager.create_state_backup()
@@ -263,7 +252,7 @@ class TestMaxSessionsLimitHandling:
         monkeypatch,
     ):
         """Test that session count increments after each work session."""
-        from claude_task_master.core.state import StateManager, TaskOptions
+        from claude_task_master.core.state import StateManager
 
         monkeypatch.chdir(integration_temp_dir)
 
@@ -367,7 +356,7 @@ class TestInterruptionRecovery:
         monkeypatch,
     ):
         """Test that state is preserved when paused."""
-        from claude_task_master.core.state import StateManager, TaskOptions
+        from claude_task_master.core.state import StateManager
 
         monkeypatch.chdir(integration_temp_dir)
 
@@ -444,13 +433,13 @@ class TestBackupCreation:
         monkeypatch,
     ):
         """Test that backups are created when errors occur."""
-        from claude_task_master.core.state import StateManager, TaskOptions
+        from claude_task_master.core.state import StateManager
 
         monkeypatch.chdir(integration_temp_dir)
 
         state_manager = StateManager(integration_state_dir)
         options = TaskOptions(auto_merge=True)
-        state = state_manager.initialize(goal="Test goal", model="sonnet", options=options)
+        state_manager.initialize(goal="Test goal", model="sonnet", options=options)
 
         # Create backup
         backup_path = state_manager.create_state_backup()
@@ -466,18 +455,19 @@ class TestBackupCreation:
         monkeypatch,
     ):
         """Test that multiple backups are preserved."""
-        from claude_task_master.core.state import StateManager, TaskOptions
         import time
+
+        from claude_task_master.core.state import StateManager
 
         monkeypatch.chdir(integration_temp_dir)
 
         state_manager = StateManager(integration_state_dir)
         options = TaskOptions(auto_merge=True)
-        state = state_manager.initialize(goal="Test goal", model="sonnet", options=options)
+        state_manager.initialize(goal="Test goal", model="sonnet", options=options)
 
         # Create multiple backups
         backups = []
-        for i in range(3):
+        for _i in range(3):
             backup_path = state_manager.create_state_backup()
             if backup_path:
                 backups.append(backup_path)
@@ -499,9 +489,8 @@ class TestInvalidStateTransitions:
     ):
         """Test that invalid state transitions raise appropriate errors."""
         from claude_task_master.core.state import (
-            StateManager,
-            TaskOptions,
             InvalidStateTransitionError,
+            StateManager,
         )
 
         monkeypatch.chdir(integration_temp_dir)
@@ -525,8 +514,8 @@ class TestInvalidStateTransitions:
     ):
         """Test that transitioning from terminal state raises error."""
         from claude_task_master.core.state import (
-            StateManager,
             InvalidStateTransitionError,
+            StateManager,
         )
 
         monkeypatch.chdir(integration_temp_dir)
@@ -551,13 +540,13 @@ class TestConcurrentAccessHandling:
         monkeypatch,
     ):
         """Test that file locking prevents concurrent access issues."""
-        from claude_task_master.core.state import StateManager, TaskOptions, file_lock
+        from claude_task_master.core.state import StateManager, file_lock
 
         monkeypatch.chdir(integration_temp_dir)
 
         state_manager = StateManager(integration_state_dir)
         options = TaskOptions(auto_merge=True)
-        state = state_manager.initialize(goal="Test goal", model="sonnet", options=options)
+        state_manager.initialize(goal="Test goal", model="sonnet", options=options)
 
         lock_file = integration_state_dir / ".test.lock"
 
@@ -574,7 +563,7 @@ class TestConcurrentAccessHandling:
         monkeypatch,
     ):
         """Test that lock timeout raises appropriate error."""
-        from claude_task_master.core.state import file_lock, StateLockError
+        from claude_task_master.core.state import file_lock
 
         monkeypatch.chdir(integration_temp_dir)
 

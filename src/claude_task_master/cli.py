@@ -1,19 +1,18 @@
 """CLI entry point for Claude Task Master."""
 
+from pathlib import Path
+
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
-from typing import Optional
-from pathlib import Path
-import sys
 
-from .core.credentials import CredentialManager
-from .core.state import StateManager, TaskOptions, StateResumeValidationError
 from .core.agent import AgentWrapper, ModelType
-from .core.planner import Planner
-from .core.orchestrator import WorkLoopOrchestrator
-from .core.logger import TaskLogger
 from .core.context_accumulator import ContextAccumulator
+from .core.credentials import CredentialManager
+from .core.logger import TaskLogger
+from .core.orchestrator import WorkLoopOrchestrator
+from .core.planner import Planner
+from .core.state import StateManager, StateResumeValidationError, TaskOptions
 from .utils.doctor import SystemDoctor
 
 app = typer.Typer(
@@ -29,7 +28,7 @@ def start(
     goal: str = typer.Argument(..., help="The goal to achieve"),
     model: str = typer.Option("sonnet", help="Model to use: sonnet, opus, haiku"),
     auto_merge: bool = typer.Option(True, help="Automatically merge PRs when ready"),
-    max_sessions: Optional[int] = typer.Option(None, help="Maximum number of sessions"),
+    max_sessions: int | None = typer.Option(None, help="Maximum number of sessions"),
     pause_on_pr: bool = typer.Option(False, help="Pause after creating PR for review"),
 ) -> None:
     """Start a new task with the given goal."""
@@ -64,7 +63,7 @@ def start(
         working_dir = Path.cwd()
         agent = AgentWrapper(access_token, model_type, str(working_dir))
         planner = Planner(agent, state_manager)
-        context_accumulator = ContextAccumulator(state_manager)
+        ContextAccumulator(state_manager)
 
         # Initialize logger
         log_file = state_manager.get_log_file(state.run_id)
@@ -93,7 +92,7 @@ def start(
             logger.log_error(str(e))
             logger.end_session("failed")
             console.print(f"\n[red]Planning failed: {e}[/red]")
-            raise typer.Exit(1)
+            raise typer.Exit(1) from None
 
         # Run work loop
         console.print("\n[bold cyan]Phase 2: Execution[/bold cyan]")
@@ -115,10 +114,10 @@ def start(
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
         console.print("Run 'claude-task-master doctor' to check your setup.")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -143,18 +142,18 @@ def resume() -> None:
                 console.print(f"[green]{e.message}[/green]")
                 if e.suggestion:
                     console.print(f"[dim]{e.suggestion}[/dim]")
-                raise typer.Exit(0)
+                raise typer.Exit(0) from None
             elif e.status == "failed":
                 console.print(f"[red]{e.message}[/red]")
                 if e.suggestion:
                     console.print(f"[dim]{e.suggestion}[/dim]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
             else:
                 # Other validation errors
                 console.print(f"[red]Error: {e.message}[/red]")
                 if e.details:
                     console.print(f"[dim]{e.details}[/dim]")
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
 
         # Display current status
         goal = state_manager.load_goal()
@@ -175,11 +174,11 @@ def resume() -> None:
         working_dir = Path.cwd()
         agent = AgentWrapper(access_token, model_type, str(working_dir))
         planner = Planner(agent, state_manager)
-        context_accumulator = ContextAccumulator(state_manager)
+        ContextAccumulator(state_manager)
 
         # Initialize logger
         log_file = state_manager.get_log_file(state.run_id)
-        logger = TaskLogger(log_file)
+        TaskLogger(log_file)
 
         # Update state to working if it was paused
         if state.status == "paused":
@@ -213,10 +212,10 @@ def resume() -> None:
     except FileNotFoundError as e:
         console.print(f"[red]Error: {e}[/red]")
         console.print("Run 'claude-task-master doctor' to check your setup.")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -243,7 +242,7 @@ def status() -> None:
         if state.current_pr:
             console.print(f"[cyan]Current PR:[/cyan] #{state.current_pr}")
 
-        console.print(f"\n[cyan]Options:[/cyan]")
+        console.print("\n[cyan]Options:[/cyan]")
         console.print(f"  Auto-merge: {state.options.auto_merge}")
         console.print(f"  Max sessions: {state.options.max_sessions or 'unlimited'}")
         console.print(f"  Pause on PR: {state.options.pause_on_pr}")
@@ -252,7 +251,7 @@ def status() -> None:
         raise
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -278,12 +277,12 @@ def plan() -> None:
         raise
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
 def logs(
-    session: Optional[int] = typer.Option(None, help="Show specific session number"),
+    session: int | None = typer.Option(None, help="Show specific session number"),
     tail: int = typer.Option(100, help="Number of lines to show from the end")
 ) -> None:
     """Display logs from the current run."""
@@ -314,7 +313,7 @@ def logs(
         raise
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -340,7 +339,7 @@ def context() -> None:
         raise
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
@@ -366,12 +365,12 @@ def progress() -> None:
         raise
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
 
 @app.command()
 def comments(
-    pr: Optional[int] = typer.Option(None, help="PR number to show comments for")
+    pr: int | None = typer.Option(None, help="PR number to show comments for")
 ) -> None:
     """Display PR review comments."""
     console.print("[bold blue]PR Comments[/bold blue]")

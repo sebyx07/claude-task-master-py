@@ -1,15 +1,15 @@
 """Comprehensive tests for CLI commands."""
 
 import json
-import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 from typer.testing import CliRunner
 
 from claude_task_master.cli import app
-from claude_task_master.core.state import StateManager, TaskState, TaskOptions
-
+from claude_task_master.core.state import StateManager
 
 # =============================================================================
 # Fixtures
@@ -1357,7 +1357,7 @@ class TestStartCommand:
                 mock_cred_manager.return_value.get_valid_token.return_value = (
                     "test-token"
                 )
-                with patch("claude_task_master.cli.AgentWrapper") as mock_agent:
+                with patch("claude_task_master.cli.AgentWrapper"):
                     with patch("claude_task_master.cli.Planner") as mock_planner:
                         mock_planner.return_value.create_plan.side_effect = Exception(
                             "Test stop"
@@ -1379,7 +1379,7 @@ class TestStartCommand:
                 mock_cred_manager.return_value.get_valid_token.return_value = (
                     "test-token"
                 )
-                with patch("claude_task_master.cli.AgentWrapper") as mock_agent:
+                with patch("claude_task_master.cli.AgentWrapper"):
                     with patch("claude_task_master.cli.Planner") as mock_planner:
                         mock_planner.return_value.create_plan.side_effect = Exception(
                             "Test stop"

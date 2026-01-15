@@ -1,6 +1,5 @@
 """Tests to verify conftest fixtures work correctly."""
 
-import pytest
 from pathlib import Path
 
 

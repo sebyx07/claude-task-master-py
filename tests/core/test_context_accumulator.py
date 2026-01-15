@@ -1,7 +1,5 @@
 """Tests for context_accumulator.py - learning accumulation and session summaries."""
 
-import pytest
-from pathlib import Path
 
 from claude_task_master.core.context_accumulator import ContextAccumulator
 from claude_task_master.core.state import StateManager

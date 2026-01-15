@@ -1,14 +1,13 @@
 """Comprehensive tests for the doctor module - system checks utility."""
 
-import pytest
 import subprocess
 import sys
-from unittest.mock import MagicMock, patch, PropertyMock
 from pathlib import Path
-from io import StringIO
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from claude_task_master.utils.doctor import SystemDoctor
-
 
 # =============================================================================
 # SystemDoctor Initialization Tests

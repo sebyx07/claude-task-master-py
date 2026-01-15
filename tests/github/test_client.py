@@ -1,12 +1,12 @@
 """Comprehensive tests for the GitHub client module."""
 
 import json
-import pytest
 import subprocess
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from claude_task_master.github.client import GitHubClient, PRStatus
-
 
 # =============================================================================
 # PRStatus Model Tests

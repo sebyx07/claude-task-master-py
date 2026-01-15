@@ -8,24 +8,18 @@ These tests verify the complete pause/resume workflow, including:
 """
 
 import json
-import pytest
-import time
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-from typer.testing import CliRunner
 from datetime import datetime
+from pathlib import Path
+
+import pytest
+from typer.testing import CliRunner
 
 from claude_task_master.cli import app
+from claude_task_master.core.credentials import CredentialManager
 from claude_task_master.core.state import (
     StateManager,
-    TaskState,
     TaskOptions,
-    RESUMABLE_STATUSES,
 )
-from claude_task_master.core.credentials import CredentialManager
-from claude_task_master.core.orchestrator import WorkLoopOrchestrator
-from claude_task_master.core.planner import Planner
-
 
 # =============================================================================
 # CLI Test Runner Fixture

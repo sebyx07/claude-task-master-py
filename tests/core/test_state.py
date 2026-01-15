@@ -1,31 +1,31 @@
 """Tests for state manager."""
 
 import json
-import pytest
-import time
 import threading
-from pathlib import Path
+import time
 from datetime import datetime
+from pathlib import Path
+
+import pytest
 
 from claude_task_master.core.state import (
-    StateManager,
-    TaskState,
-    TaskOptions,
-    StateError,
-    StateNotFoundError,
-    StateCorruptedError,
-    StateValidationError,
-    InvalidStateTransitionError,
-    StatePermissionError,
-    StateLockError,
-    StateResumeValidationError,
+    RESUMABLE_STATUSES,
+    TERMINAL_STATUSES,
     VALID_STATUSES,
     VALID_TRANSITIONS,
-    TERMINAL_STATUSES,
-    RESUMABLE_STATUSES,
+    InvalidStateTransitionError,
+    StateCorruptedError,
+    StateError,
+    StateLockError,
+    StateManager,
+    StateNotFoundError,
+    StatePermissionError,
+    StateResumeValidationError,
+    StateValidationError,
+    TaskOptions,
+    TaskState,
     file_lock,
 )
-
 
 # =============================================================================
 # TaskOptions Tests
@@ -731,7 +731,7 @@ class TestStateManagerCleanup:
         initialized_state_manager.cleanup_on_success(run_id)
 
         # Get remaining log files
-        remaining = set(f.name for f in logs_dir.glob("run-*.txt"))
+        remaining = {f.name for f in logs_dir.glob("run-*.txt")}
 
         # The 10 most recent (last 10 created) should remain
         for i in range(5, 15):

@@ -6,15 +6,14 @@ including planning phases, work sessions, error handling, and state transitions.
 """
 
 import json
-import pytest
-import sys
+from collections.abc import Generator
+from datetime import datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from datetime import datetime, timedelta
-from typing import Any, Generator
-from unittest.mock import MagicMock, AsyncMock, patch
-import asyncio
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # =============================================================================
 # Mock Claude Agent SDK Module
@@ -266,8 +265,8 @@ def integration_workflow_setup(
 
     Returns a dict with all the configured components.
     """
-    from claude_task_master.core.state import StateManager
     from claude_task_master.core.credentials import CredentialManager
+    from claude_task_master.core.state import StateManager
 
     # Set up environment
     original_cwd = Path.cwd()

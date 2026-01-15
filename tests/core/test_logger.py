@@ -1,10 +1,11 @@
 """Tests for the TaskLogger class."""
 
-import pytest
-from pathlib import Path
-from datetime import datetime
-from unittest.mock import patch, mock_open, MagicMock
 import time
+from datetime import datetime
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 
 class TestTaskLoggerInit:

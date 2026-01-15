@@ -1,8 +1,8 @@
 """Logger - Single consolidated log file per run."""
 
-from pathlib import Path
 from datetime import datetime
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any
 
 
 class TaskLogger:
@@ -11,8 +11,8 @@ class TaskLogger:
     def __init__(self, log_file: Path):
         """Initialize logger."""
         self.log_file = log_file
-        self.current_session: Optional[int] = None
-        self.session_start: Optional[datetime] = None
+        self.current_session: int | None = None
+        self.session_start: datetime | None = None
 
     def start_session(self, session_number: int, phase: str) -> None:
         """Start logging a new session."""
@@ -61,7 +61,7 @@ class TaskLogger:
 
     def log_error(self, error: str) -> None:
         """Log an error."""
-        self._write(f"\n!!! ERROR !!!")
+        self._write("\n!!! ERROR !!!")
         self._write(error)
         self._write("")
 

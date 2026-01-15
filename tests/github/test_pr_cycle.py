@@ -1,14 +1,12 @@
 """Comprehensive tests for the PR Cycle Manager module."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-import time
-from unittest.mock import MagicMock, patch, call
-from typing import Any
 
-from claude_task_master.github.pr_cycle import PRCycleManager
+from claude_task_master.core.state import TaskOptions, TaskState
 from claude_task_master.github.client import PRStatus
-from claude_task_master.core.state import TaskState, TaskOptions
-
+from claude_task_master.github.pr_cycle import PRCycleManager
 
 # =============================================================================
 # Test Fixtures

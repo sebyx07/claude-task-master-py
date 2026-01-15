@@ -1,26 +1,26 @@
 """Comprehensive tests for the credentials module."""
 
 import json
-import pytest
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import patch, MagicMock, Mock
+from unittest.mock import MagicMock, patch
+
 import httpx
+import pytest
 
 from claude_task_master.core.credentials import (
-    Credentials,
-    CredentialManager,
     CredentialError,
+    CredentialManager,
     CredentialNotFoundError,
-    InvalidCredentialsError,
     CredentialPermissionError,
-    TokenRefreshError,
-    NetworkTimeoutError,
-    NetworkConnectionError,
-    TokenRefreshHTTPError,
+    Credentials,
+    InvalidCredentialsError,
     InvalidTokenResponseError,
+    NetworkConnectionError,
+    NetworkTimeoutError,
+    TokenRefreshError,
+    TokenRefreshHTTPError,
 )
-
 
 # =============================================================================
 # Exception Classes Tests
