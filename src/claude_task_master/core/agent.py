@@ -40,8 +40,8 @@ class AgentWrapper:
                 "claude-agent-sdk not installed. Install with: pip install claude-agent-sdk"
             )
 
-        # Set API key environment variable
-        os.environ["ANTHROPIC_API_KEY"] = access_token
+        # Note: The Claude Agent SDK will automatically use credentials from
+        # ~/.claude/.credentials.json if no ANTHROPIC_API_KEY is set
 
     def run_planning_phase(
         self, goal: str, context: str = ""
@@ -119,18 +119,57 @@ Format your response clearly."""
         """Run query and collect result."""
         result_text = ""
 
-        options = self.options_class(
-            allowed_tools=tools,
-            permission_mode="bypassPermissions",  # For MVP, bypass permissions
-            working_directory=self.working_dir,
-        )
+        # Change to working directory for the query
+        import os
+        original_dir = os.getcwd()
 
-        async for message in self.query(prompt=prompt, options=options):
-            # Collect messages and look for result
-            if hasattr(message, "result"):
-                result_text = message.result
-            elif hasattr(message, "content"):
-                result_text += str(message.content)
+        try:
+            os.chdir(self.working_dir)
+
+            options = self.options_class(
+                allowed_tools=tools,
+                permission_mode="bypassPermissions",  # For MVP, bypass permissions
+            )
+
+            async for message in self.query(prompt=prompt, options=options):
+                # Handle different message types from claude-agent-sdk
+                message_type = type(message).__name__
+
+                if hasattr(message, "content") and message.content:
+                    # Assistant or User messages with content
+                    for block in message.content:
+                        block_type = type(block).__name__
+
+                        if block_type == "TextBlock":
+                            # Claude's text response
+                            print(block.text, end="", flush=True)
+                            result_text += block.text
+                        elif block_type == "ToolUseBlock":
+                            # Tool being invoked
+                            print(f"\n🔧 Using tool: {block.name}", flush=True)
+                        elif block_type == "ToolResultBlock":
+                            # Tool result - show completion
+                            if block.is_error:
+                                print(f"❌ Tool error\n", flush=True)
+                            else:
+                                print(f"✓ Tool completed\n", flush=True)
+
+                # Collect final result from ResultMessage
+                if message_type == "ResultMessage":
+                    if hasattr(message, "result"):
+                        result_text = message.result
+                        print("\n")  # Add newline after completion
+
+        except Exception as e:
+            # Print full exception details
+            import traceback
+            print(f"\n\n❌ Exception in _run_query: {type(e).__name__}: {e}", flush=True)
+            print(traceback.format_exc(), flush=True)
+            raise
+
+        finally:
+            # Always restore original directory
+            os.chdir(original_dir)
 
         return result_text
 

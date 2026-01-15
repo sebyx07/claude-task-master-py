@@ -13,7 +13,7 @@ class Credentials(BaseModel):
 
     accessToken: str
     refreshToken: str
-    expiresAt: str
+    expiresAt: int  # Timestamp in milliseconds
     tokenType: str = "Bearer"
 
 
@@ -34,12 +34,17 @@ class CredentialManager:
         with open(self.CREDENTIALS_PATH) as f:
             data = json.load(f)
 
+        # Handle nested structure - credentials are under 'claudeAiOauth' key
+        if "claudeAiOauth" in data:
+            data = data["claudeAiOauth"]
+
         return Credentials(**data)
 
     def is_expired(self, credentials: Credentials) -> bool:
         """Check if access token is expired."""
-        expires_at = datetime.fromisoformat(credentials.expiresAt.replace("Z", "+00:00"))
-        return datetime.now(expires_at.tzinfo) >= expires_at
+        # expiresAt is in milliseconds, convert to seconds
+        expires_at = datetime.fromtimestamp(credentials.expiresAt / 1000)
+        return datetime.now() >= expires_at
 
     def refresh_access_token(self, credentials: Credentials) -> Credentials:
         """Refresh access token using refresh token."""
@@ -66,8 +71,10 @@ class CredentialManager:
 
     def _save_credentials(self, credentials: Credentials) -> None:
         """Save updated credentials to file."""
+        # Preserve nested structure
+        data = {"claudeAiOauth": credentials.model_dump()}
         with open(self.CREDENTIALS_PATH, "w") as f:
-            json.dump(credentials.model_dump(), f, indent=2)
+            json.dump(data, f, indent=2)
 
     def get_valid_token(self) -> str:
         """Get a valid access token, refreshing if necessary."""
