@@ -39,7 +39,7 @@ dev = [
 ]
 
 [project.scripts]
-claude-task-master = "claude_task_master.cli:app"
+claudetm = "claude_task_master.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]

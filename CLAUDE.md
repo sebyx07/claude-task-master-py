@@ -12,15 +12,15 @@ Autonomous task orchestration system that uses Claude Agent SDK to keep Claude w
 
 ```bash
 # Setup
-uv sync                          # Install dependencies
-uv run python -m claude_task_master.cli doctor  # Check system
+uv sync --all-extras             # Install dependencies
+uv run claudetm doctor           # Check system
 
 # Usage
 cd <project-dir>
-uv run python -m claude_task_master.cli start "Your task here" --max-sessions 10
-uv run python -m claude_task_master.cli status   # Check progress
-uv run python -m claude_task_master.cli plan     # View task list
-uv run python -m claude_task_master.cli clean -f # Clean state
+uv run claudetm start "Your task here" --max-sessions 10
+uv run claudetm status           # Check progress
+uv run claudetm plan             # View task list
+uv run claudetm clean -f         # Clean state
 ```
 
 ## Development
@@ -100,7 +100,7 @@ All commands check `state_manager.exists()` first:
 Test in `tmp/test-project-1/`:
 ```bash
 cd tmp/test-project-1
-uv run python -m claude_task_master.cli start "Implement TODO" --max-sessions 3 --no-auto-merge
+uv run claudetm start "Implement TODO" --max-sessions 3 --no-auto-merge
 ```
 
 ## Important Notes

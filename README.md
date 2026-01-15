@@ -44,10 +44,10 @@ Run system checks:
 
 ```bash
 # With uv
-uv run python -m claude_task_master.cli doctor
+uv run claudetm doctor
 
 # Or if installed
-claude-task-master doctor
+claudetm doctor
 ```
 
 ## Usage
@@ -56,10 +56,10 @@ claude-task-master doctor
 
 ```bash
 # With uv
-uv run python -m claude_task_master.cli start "Your goal here"
+uv run claudetm start "Your goal here"
 
 # Or if installed
-claude-task-master start "Your goal here"
+claudetm start "Your goal here"
 ```
 
 Options:
@@ -71,30 +71,30 @@ Options:
 ### Resume a paused task
 
 ```bash
-claude-task-master resume
+claudetm resume
 ```
 
 ### Check status
 
 ```bash
-claude-task-master status    # Current status
-claude-task-master plan      # View task list
-claude-task-master progress  # Progress summary
-claude-task-master logs      # View logs
-claude-task-master context   # View accumulated learnings
+claudetm status    # Current status
+claudetm plan      # View task list
+claudetm progress  # Progress summary
+claudetm logs      # View logs
+claudetm context   # View accumulated learnings
 ```
 
 ### PR management
 
 ```bash
-claude-task-master pr         # Show PR status and CI checks
-claude-task-master comments   # Show review comments
+claudetm pr         # Show PR status and CI checks
+claudetm comments   # Show review comments
 ```
 
 ### Cleanup
 
 ```bash
-claude-task-master clean      # Clean up task state
+claudetm clean      # Clean up task state
 ```
 
 ## Architecture
