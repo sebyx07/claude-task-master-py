@@ -125,8 +125,97 @@ def start(
 def resume() -> None:
     """Resume a paused or interrupted task."""
     console.print("[bold blue]Resuming task...[/bold blue]")
-    # TODO: Implement resume logic
-    raise typer.Exit(1)
+
+    try:
+        # Check if state exists
+        state_manager = StateManager()
+        if not state_manager.exists():
+            console.print("[red]Error: No task found to resume.[/red]")
+            console.print("Use 'start' to begin a new task.")
+            raise typer.Exit(1)
+
+        # Load state and verify it's resumable
+        state = state_manager.load_state()
+
+        # Check if task is in a terminal state
+        if state.status == "success":
+            console.print("[green]Task has already completed successfully.[/green]")
+            console.print("Use 'clean' to remove state and start a new task.")
+            raise typer.Exit(0)
+
+        if state.status == "failed":
+            console.print("[red]Task has failed and cannot be resumed.[/red]")
+            console.print("Use 'clean' to remove state and start a new task.")
+            raise typer.Exit(1)
+
+        # Verify we have a plan to resume
+        plan = state_manager.load_plan()
+        if not plan:
+            console.print("[red]Error: No plan found. Task state may be corrupted.[/red]")
+            console.print("Use 'clean' to remove state and start fresh.")
+            raise typer.Exit(1)
+
+        # Display current status
+        goal = state_manager.load_goal()
+        console.print(f"\n[cyan]Goal:[/cyan] {goal}")
+        console.print(f"[cyan]Status:[/cyan] {state.status}")
+        console.print(f"[cyan]Current Task:[/cyan] {state.current_task_index + 1}")
+        console.print(f"[cyan]Session Count:[/cyan] {state.session_count}")
+
+        # Load credentials
+        console.print("\nLoading credentials...")
+        cred_manager = CredentialManager()
+        access_token = cred_manager.get_valid_token()
+
+        # Parse model type
+        model_type = ModelType(state.model)
+
+        # Initialize components
+        working_dir = Path.cwd()
+        agent = AgentWrapper(access_token, model_type, str(working_dir))
+        planner = Planner(agent, state_manager)
+        context_accumulator = ContextAccumulator(state_manager)
+
+        # Initialize logger
+        log_file = state_manager.get_log_file(state.run_id)
+        logger = TaskLogger(log_file)
+
+        # Update state to working if it was paused
+        if state.status == "paused":
+            state.status = "working"
+            state_manager.save_state(state)
+            console.print("\n[cyan]Status updated from 'paused' to 'working'[/cyan]")
+
+        # If blocked, attempt to resume anyway (user may have fixed the issue)
+        if state.status == "blocked":
+            state.status = "working"
+            state_manager.save_state(state)
+            console.print("\n[yellow]Attempting to resume blocked task...[/yellow]")
+
+        # Run work loop
+        console.print("\n[bold cyan]Resuming Execution[/bold cyan]")
+        orchestrator = WorkLoopOrchestrator(agent, state_manager, planner)
+
+        exit_code = orchestrator.run()
+
+        if exit_code == 0:
+            console.print("\n[bold green]✓ Task completed successfully![/bold green]")
+        elif exit_code == 2:
+            console.print("\n[yellow]Task paused. Use 'resume' to continue.[/yellow]")
+        else:
+            console.print("\n[red]Task blocked or failed.[/red]")
+
+        raise typer.Exit(exit_code)
+
+    except typer.Exit:
+        raise
+    except FileNotFoundError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        console.print("Run 'claude-task-master doctor' to check your setup.")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1)
 
 
 @app.command()

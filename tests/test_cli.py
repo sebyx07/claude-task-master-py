@@ -544,15 +544,328 @@ class TestDoctorCommand:
 
 
 class TestResumeCommand:
-    """Tests for the resume command (TODO implementation)."""
+    """Tests for the resume command."""
 
-    def test_resume_not_implemented(self, cli_runner):
-        """Test resume returns failure (not implemented yet)."""
-        result = cli_runner.invoke(app, ["resume"])
+    def test_resume_no_task_found(self, cli_runner, temp_dir):
+        """Test resume when no task exists."""
+        with patch.object(StateManager, "STATE_DIR", temp_dir / ".claude-task-master"):
+            result = cli_runner.invoke(app, ["resume"])
 
-        # Currently not implemented, should exit with 1
         assert result.exit_code == 1
-        assert "Resuming task" in result.output
+        assert "No task found to resume" in result.output
+        assert "start" in result.output
+
+    def test_resume_success_state(
+        self, cli_runner, temp_dir, mock_state_dir, mock_goal_file, mock_plan_file
+    ):
+        """Test resume when task has already succeeded."""
+        # Create a state with success status
+        timestamp = datetime.now().isoformat()
+        state_data = {
+            "status": "success",
+            "current_task_index": 3,
+            "session_count": 5,
+            "current_pr": None,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+            "run_id": "20250115-120000",
+            "model": "sonnet",
+            "options": {
+                "auto_merge": True,
+                "max_sessions": None,
+                "pause_on_pr": False,
+            },
+        }
+        state_file = mock_state_dir / "state.json"
+        state_file.write_text(json.dumps(state_data))
+
+        with patch.object(StateManager, "STATE_DIR", mock_state_dir):
+            result = cli_runner.invoke(app, ["resume"])
+
+        assert result.exit_code == 0
+        assert "already completed successfully" in result.output
+
+    def test_resume_failed_state(
+        self, cli_runner, temp_dir, mock_state_dir, mock_goal_file, mock_plan_file
+    ):
+        """Test resume when task has failed."""
+        timestamp = datetime.now().isoformat()
+        state_data = {
+            "status": "failed",
+            "current_task_index": 2,
+            "session_count": 3,
+            "current_pr": None,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+            "run_id": "20250115-120000",
+            "model": "sonnet",
+            "options": {
+                "auto_merge": True,
+                "max_sessions": None,
+                "pause_on_pr": False,
+            },
+        }
+        state_file = mock_state_dir / "state.json"
+        state_file.write_text(json.dumps(state_data))
+
+        with patch.object(StateManager, "STATE_DIR", mock_state_dir):
+            result = cli_runner.invoke(app, ["resume"])
+
+        assert result.exit_code == 1
+        assert "failed and cannot be resumed" in result.output
+
+    def test_resume_no_plan(
+        self, cli_runner, temp_dir, mock_state_dir, mock_state_file, mock_goal_file
+    ):
+        """Test resume when no plan exists."""
+        with patch.object(StateManager, "STATE_DIR", mock_state_dir):
+            result = cli_runner.invoke(app, ["resume"])
+
+        assert result.exit_code == 1
+        assert "No plan found" in result.output
+
+    def test_resume_paused_task(
+        self, cli_runner, temp_dir, mock_state_dir, mock_goal_file, mock_plan_file
+    ):
+        """Test resume from paused state."""
+        timestamp = datetime.now().isoformat()
+        state_data = {
+            "status": "paused",
+            "current_task_index": 1,
+            "session_count": 2,
+            "current_pr": None,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+            "run_id": "20250115-120000",
+            "model": "sonnet",
+            "options": {
+                "auto_merge": True,
+                "max_sessions": None,
+                "pause_on_pr": False,
+            },
+        }
+        state_file = mock_state_dir / "state.json"
+        state_file.write_text(json.dumps(state_data))
+
+        # Create logs directory
+        logs_dir = mock_state_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(StateManager, "STATE_DIR", mock_state_dir):
+            with patch("claude_task_master.cli.CredentialManager") as mock_cred:
+                mock_cred.return_value.get_valid_token.return_value = "test-token"
+                with patch("claude_task_master.cli.AgentWrapper"):
+                    with patch("claude_task_master.cli.WorkLoopOrchestrator") as mock_orch:
+                        mock_orch.return_value.run.return_value = 0
+
+                        result = cli_runner.invoke(app, ["resume"])
+
+        assert result.exit_code == 0
+        assert "completed successfully" in result.output
+        assert "paused" in result.output.lower() or "working" in result.output.lower()
+
+    def test_resume_blocked_task(
+        self, cli_runner, temp_dir, mock_state_dir, mock_goal_file, mock_plan_file
+    ):
+        """Test resume from blocked state."""
+        timestamp = datetime.now().isoformat()
+        state_data = {
+            "status": "blocked",
+            "current_task_index": 1,
+            "session_count": 3,
+            "current_pr": 42,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+            "run_id": "20250115-120000",
+            "model": "opus",
+            "options": {
+                "auto_merge": False,
+                "max_sessions": 5,
+                "pause_on_pr": True,
+            },
+        }
+        state_file = mock_state_dir / "state.json"
+        state_file.write_text(json.dumps(state_data))
+
+        # Create logs directory
+        logs_dir = mock_state_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(StateManager, "STATE_DIR", mock_state_dir):
+            with patch("claude_task_master.cli.CredentialManager") as mock_cred:
+                mock_cred.return_value.get_valid_token.return_value = "test-token"
+                with patch("claude_task_master.cli.AgentWrapper"):
+                    with patch("claude_task_master.cli.WorkLoopOrchestrator") as mock_orch:
+                        mock_orch.return_value.run.return_value = 0
+
+                        result = cli_runner.invoke(app, ["resume"])
+
+        assert result.exit_code == 0
+        assert "Attempting to resume blocked task" in result.output
+
+    def test_resume_working_task(
+        self, cli_runner, temp_dir, mock_state_dir, mock_goal_file, mock_plan_file, mock_state_file
+    ):
+        """Test resume from working state (e.g., after crash)."""
+        # Create logs directory
+        logs_dir = mock_state_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(StateManager, "STATE_DIR", mock_state_dir):
+            with patch("claude_task_master.cli.CredentialManager") as mock_cred:
+                mock_cred.return_value.get_valid_token.return_value = "test-token"
+                with patch("claude_task_master.cli.AgentWrapper"):
+                    with patch("claude_task_master.cli.WorkLoopOrchestrator") as mock_orch:
+                        mock_orch.return_value.run.return_value = 0
+
+                        result = cli_runner.invoke(app, ["resume"])
+
+        assert result.exit_code == 0
+        assert "completed successfully" in result.output
+
+    def test_resume_credential_error(
+        self, cli_runner, temp_dir, mock_state_dir, mock_state_file, mock_goal_file, mock_plan_file
+    ):
+        """Test resume handles credential errors."""
+        # Create logs directory
+        logs_dir = mock_state_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(StateManager, "STATE_DIR", mock_state_dir):
+            with patch("claude_task_master.cli.CredentialManager") as mock_cred:
+                mock_cred.return_value.get_valid_token.side_effect = FileNotFoundError(
+                    "Credentials not found"
+                )
+
+                result = cli_runner.invoke(app, ["resume"])
+
+        assert result.exit_code == 1
+        assert "Credentials not found" in result.output
+        assert "doctor" in result.output
+
+    def test_resume_displays_status(
+        self, cli_runner, temp_dir, mock_state_dir, mock_state_file, mock_goal_file, mock_plan_file
+    ):
+        """Test resume displays current status before resuming."""
+        # Create logs directory
+        logs_dir = mock_state_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(StateManager, "STATE_DIR", mock_state_dir):
+            with patch("claude_task_master.cli.CredentialManager") as mock_cred:
+                mock_cred.return_value.get_valid_token.return_value = "test-token"
+                with patch("claude_task_master.cli.AgentWrapper"):
+                    with patch("claude_task_master.cli.WorkLoopOrchestrator") as mock_orch:
+                        mock_orch.return_value.run.return_value = 2
+
+                        result = cli_runner.invoke(app, ["resume"])
+
+        # Should display goal and status info
+        assert "Goal:" in result.output
+        assert "Status:" in result.output
+        assert "Current Task:" in result.output
+        assert "Session Count:" in result.output
+
+    def test_resume_orchestrator_pauses_again(
+        self, cli_runner, temp_dir, mock_state_dir, mock_state_file, mock_goal_file, mock_plan_file
+    ):
+        """Test resume when orchestrator returns paused status."""
+        # Create logs directory
+        logs_dir = mock_state_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(StateManager, "STATE_DIR", mock_state_dir):
+            with patch("claude_task_master.cli.CredentialManager") as mock_cred:
+                mock_cred.return_value.get_valid_token.return_value = "test-token"
+                with patch("claude_task_master.cli.AgentWrapper"):
+                    with patch("claude_task_master.cli.WorkLoopOrchestrator") as mock_orch:
+                        mock_orch.return_value.run.return_value = 2
+
+                        result = cli_runner.invoke(app, ["resume"])
+
+        assert result.exit_code == 2
+        assert "paused" in result.output
+        assert "resume" in result.output
+
+    def test_resume_orchestrator_blocks(
+        self, cli_runner, temp_dir, mock_state_dir, mock_state_file, mock_goal_file, mock_plan_file
+    ):
+        """Test resume when orchestrator returns blocked status."""
+        # Create logs directory
+        logs_dir = mock_state_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(StateManager, "STATE_DIR", mock_state_dir):
+            with patch("claude_task_master.cli.CredentialManager") as mock_cred:
+                mock_cred.return_value.get_valid_token.return_value = "test-token"
+                with patch("claude_task_master.cli.AgentWrapper"):
+                    with patch("claude_task_master.cli.WorkLoopOrchestrator") as mock_orch:
+                        mock_orch.return_value.run.return_value = 1
+
+                        result = cli_runner.invoke(app, ["resume"])
+
+        assert result.exit_code == 1
+        assert "blocked" in result.output or "failed" in result.output
+
+    def test_resume_planning_state(
+        self, cli_runner, temp_dir, mock_state_dir, mock_goal_file, mock_plan_file
+    ):
+        """Test resume from planning state (interrupted during planning)."""
+        timestamp = datetime.now().isoformat()
+        state_data = {
+            "status": "planning",
+            "current_task_index": 0,
+            "session_count": 0,
+            "current_pr": None,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+            "run_id": "20250115-120000",
+            "model": "haiku",
+            "options": {
+                "auto_merge": True,
+                "max_sessions": None,
+                "pause_on_pr": False,
+            },
+        }
+        state_file = mock_state_dir / "state.json"
+        state_file.write_text(json.dumps(state_data))
+
+        # Create logs directory
+        logs_dir = mock_state_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(StateManager, "STATE_DIR", mock_state_dir):
+            with patch("claude_task_master.cli.CredentialManager") as mock_cred:
+                mock_cred.return_value.get_valid_token.return_value = "test-token"
+                with patch("claude_task_master.cli.AgentWrapper"):
+                    with patch("claude_task_master.cli.WorkLoopOrchestrator") as mock_orch:
+                        mock_orch.return_value.run.return_value = 0
+
+                        result = cli_runner.invoke(app, ["resume"])
+
+        # Planning state should be resumable - it's not a terminal state
+        assert result.exit_code == 0
+        assert "completed successfully" in result.output
+
+    def test_resume_generic_exception(
+        self, cli_runner, temp_dir, mock_state_dir, mock_state_file, mock_goal_file, mock_plan_file
+    ):
+        """Test resume handles generic exceptions."""
+        # Create logs directory
+        logs_dir = mock_state_dir / "logs"
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(StateManager, "STATE_DIR", mock_state_dir):
+            with patch("claude_task_master.cli.CredentialManager") as mock_cred:
+                mock_cred.return_value.get_valid_token.return_value = "test-token"
+                with patch("claude_task_master.cli.AgentWrapper"):
+                    with patch("claude_task_master.cli.WorkLoopOrchestrator") as mock_orch:
+                        mock_orch.return_value.run.side_effect = RuntimeError("Unexpected error")
+
+                        result = cli_runner.invoke(app, ["resume"])
+
+        assert result.exit_code == 1
+        assert "Unexpected error" in result.output
 
 
 # =============================================================================
