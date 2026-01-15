@@ -637,11 +637,11 @@ Format your response clearly."""
         """
         target_model = model or self.model
         model_map = {
-            ModelType.SONNET: "claude-sonnet-4-5-20241022",
-            ModelType.OPUS: "claude-opus-4-5-20250514",
-            ModelType.HAIKU: "claude-haiku-4-5-20241022",
+            ModelType.SONNET: "claude-sonnet-4-5-20250929",
+            ModelType.OPUS: "claude-opus-4-5-20251101",
+            ModelType.HAIKU: "claude-haiku-4-5-20251001",
         }
-        return model_map.get(target_model, "claude-sonnet-4-5-20241022")
+        return model_map.get(target_model, "claude-sonnet-4-5-20250929")
 
     def _build_planning_prompt(self, goal: str, context: str) -> str:
         """Build prompt for planning phase."""
