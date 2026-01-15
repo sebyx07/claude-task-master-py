@@ -152,6 +152,20 @@ class StateResumeValidationError(StateError):
 # Define valid status values
 VALID_STATUSES = frozenset(["planning", "working", "blocked", "paused", "success", "failed"])
 
+# Define workflow stages for PR lifecycle
+WORKFLOW_STAGES = frozenset(
+    [
+        "working",  # Implementing tasks
+        "pr_created",  # PR created, waiting for CI/reviews
+        "waiting_ci",  # Polling CI status
+        "ci_failed",  # CI failed, needs fixes
+        "waiting_reviews",  # Waiting for code reviews
+        "addressing_reviews",  # Working on review feedback
+        "ready_to_merge",  # All checks passed, ready to merge
+        "merged",  # PR merged, ready for next task
+    ]
+)
+
 # Define terminal statuses (cannot be resumed)
 TERMINAL_STATUSES = frozenset(["success", "failed"])
 
@@ -188,10 +202,24 @@ class TaskOptions(BaseModel):
 StatusType = Literal["planning", "working", "blocked", "paused", "success", "failed"]
 
 
+# Workflow stage type alias
+WorkflowStageType = Literal[
+    "working",
+    "pr_created",
+    "waiting_ci",
+    "ci_failed",
+    "waiting_reviews",
+    "addressing_reviews",
+    "ready_to_merge",
+    "merged",
+]
+
+
 class TaskState(BaseModel):
     """Machine-readable state."""
 
     status: StatusType  # planning|working|blocked|paused|success|failed
+    workflow_stage: WorkflowStageType | None = None  # PR lifecycle stage
     current_task_index: int = 0
     session_count: int = 0
     current_pr: int | None = None

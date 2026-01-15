@@ -604,18 +604,19 @@ class TestRunWorkSession:
         task_description = call_args.kwargs["task_description"]
         assert "Current Task" in task_description
 
-    def test_run_work_session_increments_task_index(
+    def test_run_work_session_does_not_increment_task_index(
         self, orchestrator, mock_agent_wrapper, initialized_state_manager
     ):
-        """Test work session increments task index after completion."""
+        """Test work session does not increment task index (handled by workflow stage)."""
         state = orchestrator.state_manager.load_state()
         initial_index = state.current_task_index
 
         orchestrator._run_work_session(state)
 
-        # Reload state to check update
+        # Task index increment is now handled by _handle_merged_stage in the PR workflow
+        # _run_work_session should NOT increment the index
         updated_state = initialized_state_manager.load_state()
-        assert updated_state.current_task_index == initial_index + 1
+        assert updated_state.current_task_index == initial_index
 
     def test_run_work_session_saves_progress(
         self, orchestrator, mock_agent_wrapper, initialized_state_manager

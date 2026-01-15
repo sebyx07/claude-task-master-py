@@ -1,10 +1,18 @@
 """Work Loop Orchestrator - Main loop driving work sessions until completion."""
 
+from __future__ import annotations
+
+import time
+from typing import TYPE_CHECKING
+
 from . import console
-from .agent import AgentError, AgentWrapper, TaskComplexity, parse_task_complexity
-from .key_listener import check_escape, start_listening, stop_listening
+from .agent import AgentError, AgentWrapper, ModelType, TaskComplexity, parse_task_complexity
+from .key_listener import check_escape, reset_escape, start_listening, stop_listening
 from .planner import Planner
 from .state import StateError, StateManager, TaskState
+
+if TYPE_CHECKING:
+    from ..github.client import GitHubClient
 
 # =============================================================================
 # Custom Exception Classes
@@ -122,19 +130,75 @@ class VerificationFailedError(OrchestratorError):
         )
 
 
+class PRWorkflowError(OrchestratorError):
+    """Raised when PR workflow operations fail."""
+
+    def __init__(self, pr_number: int, stage: str, message: str):
+        self.pr_number = pr_number
+        self.stage = stage
+        super().__init__(
+            f"PR #{pr_number} workflow error at {stage}",
+            message,
+        )
+
+
+class CITimeoutError(OrchestratorError):
+    """Raised when CI checks timeout."""
+
+    def __init__(self, pr_number: int, timeout_seconds: int):
+        self.pr_number = pr_number
+        self.timeout_seconds = timeout_seconds
+        super().__init__(
+            f"CI checks timed out for PR #{pr_number}",
+            f"Waited {timeout_seconds} seconds. Check CI status manually.",
+        )
+
+
 class WorkLoopOrchestrator:
-    """Orchestrates the main work loop."""
+    """Orchestrates the main work loop with full PR workflow support.
+
+    Workflow: plan → work → PR → CI → reviews → fix → merge → next PR → success
+    """
+
+    # CI polling configuration
+    CI_POLL_INTERVAL = 30  # seconds between CI status checks
+    CI_TIMEOUT = 600  # 10 minutes max wait for CI
+    REVIEW_POLL_INTERVAL = 60  # seconds between review checks
 
     def __init__(
         self,
         agent: AgentWrapper,
         state_manager: StateManager,
         planner: Planner,
+        github_client: GitHubClient | None = None,
     ):
-        """Initialize orchestrator."""
+        """Initialize orchestrator.
+
+        Args:
+            agent: The agent wrapper for running queries.
+            state_manager: The state manager for persistence.
+            planner: The planner for planning phases.
+            github_client: Optional GitHub client for PR operations.
+        """
         self.agent = agent
         self.state_manager = state_manager
         self.planner = planner
+        self._github_client = github_client
+
+    @property
+    def github_client(self) -> GitHubClient:
+        """Get or lazily initialize GitHub client."""
+        if self._github_client is None:
+            try:
+                from ..github.client import GitHubClient
+
+                self._github_client = GitHubClient()
+            except Exception as e:
+                raise OrchestratorError(
+                    "GitHub client not available",
+                    f"Install gh CLI and run 'gh auth login': {e}",
+                ) from e
+        return self._github_client
 
     def run(self) -> int:
         """Run the main work loop until completion or blocked.
@@ -185,49 +249,12 @@ class WorkLoopOrchestrator:
                     stop_listening()
                     return 2  # Paused
 
-                # Run work session for current task with error handling
-                try:
-                    self._run_work_session(state)
-                except NoPlanFoundError as e:
-                    console.error(e.message)
-                    state.status = "failed"
-                    self.state_manager.save_state(state)
-                    return 1
-                except NoTasksFoundError as e:
-                    # No tasks is actually a success case (nothing to do)
-                    console.info(e.message)
-                    break
-                except WorkSessionError as e:
-                    # Log error details but continue - agent may have partially completed
-                    console.warning(f"Work session error: {e.message}")
-                    if e.details:
-                        console.detail(e.details)
-                    # Create a backup before potentially continuing
-                    self.state_manager.create_state_backup()
-                    # Re-raise to be handled by outer exception handler
-                    raise
-                except AgentError as e:
-                    # Agent-specific errors - wrap with context
-                    console.error(f"Agent error during work session: {e.message}")
-                    if e.details:
-                        console.detail(e.details)
-                    raise WorkSessionError(
-                        state.current_task_index,
-                        self._get_current_task_description(state),
-                        e,
-                    ) from e
+                # Run the PR workflow cycle
+                result = self._run_workflow_cycle(state)
+                if result is not None:
+                    return result
 
-                # Check if we need to create/update PR
-                # TODO: Implement PR cycle
-
-                # Move to next task if current is complete
-                # TODO: Implement task completion check
-
-                # Increment session count
-                state.session_count += 1
-                self.state_manager.save_state(state)
-
-                # Check session limit again
+                # Check session limit
                 if state.options.max_sessions and state.session_count >= state.options.max_sessions:
                     error = MaxSessionsReachedError(state.options.max_sessions, state.session_count)
                     console.warning(error.message)
@@ -351,6 +378,310 @@ class WorkLoopOrchestrator:
             return None
         except Exception:
             return None
+
+    def _run_workflow_cycle(self, state: TaskState) -> int | None:
+        """Run one cycle of the PR workflow.
+
+        Workflow stages:
+        1. working → Implement tasks
+        2. pr_created → Create/update PR
+        3. waiting_ci → Poll CI status
+        4. ci_failed → Fix CI failures
+        5. waiting_reviews → Wait for reviews
+        6. addressing_reviews → Address review feedback
+        7. ready_to_merge → Merge PR
+        8. merged → Move to next task
+
+        Args:
+            state: Current task state.
+
+        Returns:
+            Exit code (0, 1, 2) if should exit, None to continue.
+        """
+        # Initialize workflow stage if not set
+        if state.workflow_stage is None:
+            state.workflow_stage = "working"
+            self.state_manager.save_state(state)
+
+        stage = state.workflow_stage
+
+        try:
+            if stage == "working":
+                return self._handle_working_stage(state)
+            elif stage == "pr_created":
+                return self._handle_pr_created_stage(state)
+            elif stage == "waiting_ci":
+                return self._handle_waiting_ci_stage(state)
+            elif stage == "ci_failed":
+                return self._handle_ci_failed_stage(state)
+            elif stage == "waiting_reviews":
+                return self._handle_waiting_reviews_stage(state)
+            elif stage == "addressing_reviews":
+                return self._handle_addressing_reviews_stage(state)
+            elif stage == "ready_to_merge":
+                return self._handle_ready_to_merge_stage(state)
+            elif stage == "merged":
+                return self._handle_merged_stage(state)
+            else:
+                console.warning(f"Unknown workflow stage: {stage}, resetting to working")
+                state.workflow_stage = "working"
+                self.state_manager.save_state(state)
+                return None
+
+        except NoPlanFoundError as e:
+            console.error(e.message)
+            state.status = "failed"
+            self.state_manager.save_state(state)
+            return 1
+        except NoTasksFoundError as e:
+            console.info(e.message)
+            return None  # Continue to completion check
+        except WorkSessionError as e:
+            console.warning(f"Work session error: {e.message}")
+            if e.details:
+                console.detail(e.details)
+            self.state_manager.create_state_backup()
+            raise
+        except AgentError as e:
+            console.error(f"Agent error: {e.message}")
+            if e.details:
+                console.detail(e.details)
+            raise WorkSessionError(
+                state.current_task_index,
+                self._get_current_task_description(state),
+                e,
+            ) from e
+
+    def _handle_working_stage(self, state: TaskState) -> int | None:
+        """Handle the working stage - implement the current task."""
+        self._run_work_session(state)
+
+        # After work session, check if we should create a PR
+        # For now, always try to create/update PR after work
+        state.workflow_stage = "pr_created"
+        state.session_count += 1
+        self.state_manager.save_state(state)
+        return None
+
+    def _handle_pr_created_stage(self, state: TaskState) -> int | None:
+        """Handle PR creation - check if PR exists or needs creation."""
+        console.info("Checking PR status...")
+
+        if state.current_pr is None:
+            # Let agent create PR in next work session
+            console.detail("No PR yet - agent will create one if needed")
+            state.workflow_stage = "waiting_ci"
+            self.state_manager.save_state(state)
+            return None
+
+        # PR exists, move to CI check
+        console.detail(f"PR #{state.current_pr} exists")
+        state.workflow_stage = "waiting_ci"
+        self.state_manager.save_state(state)
+        return None
+
+    def _handle_waiting_ci_stage(self, state: TaskState) -> int | None:
+        """Handle waiting for CI - poll CI status."""
+        if state.current_pr is None:
+            # No PR, skip CI check
+            state.workflow_stage = "waiting_reviews"
+            self.state_manager.save_state(state)
+            return None
+
+        console.info(f"Checking CI status for PR #{state.current_pr}...")
+
+        try:
+            pr_status = self.github_client.get_pr_status(state.current_pr)
+
+            if pr_status.ci_state == "SUCCESS":
+                console.success("CI passed!")
+                state.workflow_stage = "waiting_reviews"
+                self.state_manager.save_state(state)
+                return None
+            elif pr_status.ci_state in ("FAILURE", "ERROR"):
+                console.warning(f"CI failed: {pr_status.ci_state}")
+                # Show failed checks
+                for check in pr_status.check_details:
+                    if check.get("conclusion") in ("failure", "error"):
+                        console.detail(f"  ✗ {check['name']}: {check.get('conclusion')}")
+                state.workflow_stage = "ci_failed"
+                self.state_manager.save_state(state)
+                return None
+            else:
+                # Still pending, wait and retry
+                console.detail(f"CI pending... ({pr_status.ci_state})")
+                time.sleep(self.CI_POLL_INTERVAL)
+                return None
+
+        except Exception as e:
+            console.warning(f"Error checking CI: {e}")
+            # Skip CI check on error, continue to reviews
+            state.workflow_stage = "waiting_reviews"
+            self.state_manager.save_state(state)
+            return None
+
+    def _handle_ci_failed_stage(self, state: TaskState) -> int | None:
+        """Handle CI failure - run agent to fix issues."""
+        console.info("CI failed - running agent to fix...")
+
+        # Get failed logs for context
+        try:
+            failed_logs = self.github_client.get_failed_run_logs(max_lines=50)
+        except Exception:
+            failed_logs = "Could not retrieve CI logs"
+
+        # Build fix prompt
+        task_description = f"""CI has failed for PR #{state.current_pr}.
+
+Failed CI logs:
+{failed_logs}
+
+Please:
+1. Read the error messages carefully
+2. Make the necessary fixes
+3. Run tests locally to verify
+4. Commit and push the fixes"""
+
+        # Run agent with Opus for complex debugging
+        try:
+            context = self.state_manager.load_context()
+        except Exception:
+            context = ""
+
+        self.agent.run_work_session(
+            task_description=task_description,
+            context=context,
+            model_override=ModelType.OPUS,  # Use smartest model for debugging
+        )
+
+        # After fixing, go back to CI wait
+        state.workflow_stage = "waiting_ci"
+        state.session_count += 1
+        self.state_manager.save_state(state)
+        return None
+
+    def _handle_waiting_reviews_stage(self, state: TaskState) -> int | None:
+        """Handle waiting for reviews - check for review comments."""
+        if state.current_pr is None:
+            # No PR, skip review check and mark task done
+            state.workflow_stage = "merged"
+            self.state_manager.save_state(state)
+            return None
+
+        console.info(f"Checking reviews for PR #{state.current_pr}...")
+
+        try:
+            pr_status = self.github_client.get_pr_status(state.current_pr)
+
+            if pr_status.unresolved_threads > 0:
+                console.warning(f"Found {pr_status.unresolved_threads} unresolved review comments")
+                state.workflow_stage = "addressing_reviews"
+                self.state_manager.save_state(state)
+                return None
+            else:
+                console.success("No unresolved reviews!")
+                state.workflow_stage = "ready_to_merge"
+                self.state_manager.save_state(state)
+                return None
+
+        except Exception as e:
+            console.warning(f"Error checking reviews: {e}")
+            # Skip review check on error
+            state.workflow_stage = "ready_to_merge"
+            self.state_manager.save_state(state)
+            return None
+
+    def _handle_addressing_reviews_stage(self, state: TaskState) -> int | None:
+        """Handle addressing reviews - run agent to fix review comments."""
+        console.info("Addressing review comments...")
+
+        # Get PR comments
+        try:
+            comments = self.github_client.get_pr_comments(
+                state.current_pr,
+                only_unresolved=True,  # type: ignore
+            )
+        except Exception:
+            comments = "Could not retrieve review comments"
+
+        # Build fix prompt
+        task_description = f"""PR #{state.current_pr} has review comments to address.
+
+Review comments:
+{comments}
+
+Please:
+1. Read each comment carefully
+2. Make the requested changes
+3. Run tests to verify
+4. Commit and push the fixes"""
+
+        # Run agent
+        try:
+            context = self.state_manager.load_context()
+        except Exception:
+            context = ""
+
+        self.agent.run_work_session(
+            task_description=task_description,
+            context=context,
+            pr_comments=comments,
+            model_override=ModelType.OPUS,  # Use smartest model for reviews
+        )
+
+        # After addressing, go back to CI wait (fixes may trigger new CI)
+        state.workflow_stage = "waiting_ci"
+        state.session_count += 1
+        self.state_manager.save_state(state)
+        return None
+
+    def _handle_ready_to_merge_stage(self, state: TaskState) -> int | None:
+        """Handle ready to merge - merge the PR if auto_merge enabled."""
+        if state.current_pr is None:
+            state.workflow_stage = "merged"
+            self.state_manager.save_state(state)
+            return None
+
+        if state.options.auto_merge:
+            console.info(f"Merging PR #{state.current_pr}...")
+            try:
+                self.github_client.merge_pr(state.current_pr)
+                console.success(f"PR #{state.current_pr} merged!")
+                state.workflow_stage = "merged"
+                self.state_manager.save_state(state)
+                return None
+            except Exception as e:
+                console.warning(f"Auto-merge failed: {e}")
+                console.detail("PR may need manual merge or have merge conflicts")
+                state.status = "blocked"
+                self.state_manager.save_state(state)
+                return 1
+        else:
+            console.info(f"PR #{state.current_pr} ready to merge (auto_merge disabled)")
+            console.detail("Use 'claudetm resume' after manual merge")
+            state.status = "paused"
+            self.state_manager.save_state(state)
+            return 2
+
+    def _handle_merged_stage(self, state: TaskState) -> int | None:
+        """Handle merged state - move to next task."""
+        console.success(f"Task #{state.current_task_index + 1} complete!")
+
+        # Mark task as complete in plan
+        plan = self.state_manager.load_plan()
+        if plan:
+            self._mark_task_complete(plan, state.current_task_index)
+
+        # Move to next task
+        state.current_task_index += 1
+        state.current_pr = None
+        state.workflow_stage = "working"
+        self.state_manager.save_state(state)
+
+        # Reset escape flag for next iteration
+        reset_escape()
+
+        return None
 
     def _get_current_task_description(self, state: TaskState) -> str:
         """Get the description of the current task.
@@ -502,14 +833,7 @@ Please complete this task."""
         except Exception as e:
             console.warning(f"Could not save progress: {e}")
 
-        # Mark task as complete and move to next
-        try:
-            self._mark_task_complete(plan, state.current_task_index)
-        except Exception as e:
-            console.warning(f"Could not mark task as complete: {e}")
-
-        state.current_task_index += 1
-        self.state_manager.save_state(state)
+        # Note: task completion and index increment are handled by _handle_merged_stage
 
     def _parse_tasks(self, plan: str) -> list[str]:
         """Parse tasks from plan markdown."""

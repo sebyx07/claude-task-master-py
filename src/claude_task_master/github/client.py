@@ -16,6 +16,18 @@ class PRStatus(BaseModel):
     check_details: list[dict[str, Any]]
 
 
+class WorkflowRun(BaseModel):
+    """GitHub Actions workflow run information."""
+
+    id: int
+    name: str
+    status: str  # queued, in_progress, completed
+    conclusion: str | None  # success, failure, cancelled, skipped, etc.
+    url: str
+    head_branch: str
+    event: str  # push, pull_request, etc.
+
+
 class GitHubClient:
     """Handles all GitHub operations using gh CLI."""
 
@@ -239,3 +251,139 @@ class GitHubClient:
             text=True,
         )
         return result.stdout.strip()
+
+    def get_workflow_runs(self, limit: int = 5, branch: str | None = None) -> list[WorkflowRun]:
+        """Get recent workflow runs.
+
+        Args:
+            limit: Maximum number of runs to return.
+            branch: Optional branch filter.
+
+        Returns:
+            List of WorkflowRun objects.
+        """
+        cmd = [
+            "gh",
+            "run",
+            "list",
+            "--limit",
+            str(limit),
+            "--json",
+            "databaseId,name,status,conclusion,url,headBranch,event",
+        ]
+        if branch:
+            cmd.extend(["--branch", branch])
+
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        data = json.loads(result.stdout)
+
+        return [
+            WorkflowRun(
+                id=run["databaseId"],
+                name=run["name"],
+                status=run["status"],
+                conclusion=run.get("conclusion"),
+                url=run["url"],
+                head_branch=run["headBranch"],
+                event=run["event"],
+            )
+            for run in data
+        ]
+
+    def get_workflow_run_status(self, run_id: int | None = None) -> str:
+        """Get workflow run status formatted for display.
+
+        Args:
+            run_id: Specific run ID. If None, gets the latest run.
+
+        Returns:
+            Formatted status string.
+        """
+        if run_id:
+            cmd = ["gh", "run", "view", str(run_id), "--json", "status,conclusion,jobs"]
+        else:
+            # Get the latest run
+            runs = self.get_workflow_runs(limit=1)
+            if not runs:
+                return "No workflow runs found."
+            run_id = runs[0].id
+            cmd = ["gh", "run", "view", str(run_id), "--json", "status,conclusion,jobs"]
+
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        data = json.loads(result.stdout)
+
+        status = data.get("status", "unknown")
+        conclusion = data.get("conclusion", "pending")
+        jobs = data.get("jobs", [])
+
+        lines = [f"**Run #{run_id}**: {status} ({conclusion or 'in progress'})"]
+
+        for job in jobs:
+            job_status = job.get("conclusion") or job.get("status", "unknown")
+            job_name = job.get("name", "Unknown Job")
+            emoji = "✓" if job_status == "success" else "✗" if job_status == "failure" else "⏳"
+            lines.append(f"  {emoji} {job_name}: {job_status}")
+
+        return "\n".join(lines)
+
+    def get_failed_run_logs(self, run_id: int | None = None, max_lines: int = 100) -> str:
+        """Get logs from failed workflow run jobs.
+
+        Args:
+            run_id: Specific run ID. If None, gets the latest failed run.
+            max_lines: Maximum lines of logs to return per job.
+
+        Returns:
+            Formatted log output.
+        """
+        cmd = ["gh", "run", "view"]
+        if run_id:
+            cmd.append(str(run_id))
+        cmd.append("--log-failed")
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            return f"Error getting logs: {result.stderr}"
+
+        # Truncate output if too long
+        lines = result.stdout.strip().split("\n")
+        if len(lines) > max_lines:
+            return "\n".join(lines[:max_lines]) + f"\n\n... ({len(lines) - max_lines} more lines)"
+
+        return result.stdout.strip()
+
+    def wait_for_ci(self, pr_number: int | None = None, timeout: int = 300) -> tuple[bool, str]:
+        """Wait for CI checks to complete.
+
+        Args:
+            pr_number: PR number to check. If None, checks current branch.
+            timeout: Maximum seconds to wait.
+
+        Returns:
+            Tuple of (success: bool, message: str).
+        """
+        import time
+
+        start = time.time()
+        while time.time() - start < timeout:
+            if pr_number:
+                status = self.get_pr_status(pr_number)
+                if status.ci_state == "SUCCESS":
+                    return True, "All CI checks passed!"
+                elif status.ci_state in ("FAILURE", "ERROR"):
+                    return False, f"CI failed with state: {status.ci_state}"
+                # Still pending, wait
+            else:
+                runs = self.get_workflow_runs(limit=1)
+                if runs:
+                    run = runs[0]
+                    if run.status == "completed":
+                        if run.conclusion == "success":
+                            return True, "Workflow run succeeded!"
+                        else:
+                            return False, f"Workflow run failed: {run.conclusion}"
+
+            time.sleep(10)  # Poll every 10 seconds
+
+        return False, f"Timeout after {timeout} seconds"

@@ -420,5 +420,134 @@ def doctor() -> None:
     raise typer.Exit(0 if success else 1)
 
 
+@app.command(name="ci-status")
+def ci_status(
+    run_id: int | None = typer.Option(None, help="Specific workflow run ID"),
+    limit: int = typer.Option(5, help="Number of recent runs to show"),
+) -> None:
+    """Show GitHub Actions workflow run status."""
+    from .github.client import GitHubClient
+
+    try:
+        gh = GitHubClient()
+
+        if run_id:
+            # Show specific run status
+            status = gh.get_workflow_run_status(run_id)
+            console.print(status)
+        else:
+            # Show recent runs
+            runs = gh.get_workflow_runs(limit=limit)
+            if not runs:
+                console.print("[yellow]No workflow runs found.[/yellow]")
+                raise typer.Exit(0)
+
+            console.print("[bold]Recent Workflow Runs:[/bold]\n")
+            for run in runs:
+                emoji = (
+                    "✓"
+                    if run.conclusion == "success"
+                    else "✗"
+                    if run.conclusion == "failure"
+                    else "⏳"
+                )
+                console.print(
+                    f"{emoji} [bold]#{run.id}[/bold] {run.name} "
+                    f"({run.status}/{run.conclusion or 'pending'}) - {run.head_branch}"
+                )
+
+    except RuntimeError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
+@app.command(name="ci-logs")
+def ci_logs(
+    run_id: int | None = typer.Option(None, help="Specific workflow run ID"),
+    lines: int = typer.Option(100, help="Maximum lines to show"),
+) -> None:
+    """Show logs from failed CI runs."""
+    from .github.client import GitHubClient
+
+    try:
+        gh = GitHubClient()
+        logs = gh.get_failed_run_logs(run_id, max_lines=lines)
+        if logs:
+            console.print(logs)
+        else:
+            console.print("[green]No failed runs found.[/green]")
+
+    except RuntimeError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
+@app.command(name="pr-comments")
+def pr_comments(
+    pr_number: int = typer.Argument(..., help="PR number"),
+    all_comments: bool = typer.Option(False, "--all", "-a", help="Include resolved comments"),
+) -> None:
+    """Show PR review comments formatted for addressing."""
+    from .github.client import GitHubClient
+
+    try:
+        gh = GitHubClient()
+        comments = gh.get_pr_comments(pr_number, only_unresolved=not all_comments)
+
+        if comments:
+            console.print(f"[bold]Review Comments for PR #{pr_number}:[/bold]\n")
+            console.print(comments)
+        else:
+            console.print(
+                f"[green]No {'unresolved ' if not all_comments else ''}comments on PR #{pr_number}.[/green]"
+            )
+
+    except RuntimeError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
+@app.command(name="pr-status")
+def pr_status_cmd(
+    pr_number: int = typer.Argument(..., help="PR number"),
+) -> None:
+    """Show PR status including CI and review comments."""
+    from .github.client import GitHubClient
+
+    try:
+        gh = GitHubClient()
+        status = gh.get_pr_status(pr_number)
+
+        ci_emoji = (
+            "✓"
+            if status.ci_state == "SUCCESS"
+            else "✗"
+            if status.ci_state in ("FAILURE", "ERROR")
+            else "⏳"
+        )
+
+        console.print(f"[bold]PR #{pr_number} Status:[/bold]")
+        console.print(f"  {ci_emoji} CI: {status.ci_state}")
+        console.print(f"  💬 Unresolved comments: {status.unresolved_threads}")
+
+        if status.check_details:
+            console.print("\n[bold]Checks:[/bold]")
+            for check in status.check_details:
+                check_emoji = (
+                    "✓"
+                    if check.get("conclusion") == "success"
+                    else "✗"
+                    if check.get("conclusion") == "failure"
+                    else "⏳"
+                )
+                console.print(
+                    f"  {check_emoji} {check['name']}: {check.get('conclusion') or check.get('status', 'pending')}"
+                )
+
+    except RuntimeError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(1) from None
+
+
 if __name__ == "__main__":
     app()
