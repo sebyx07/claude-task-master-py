@@ -1,5 +1,6 @@
 """Core module - exports key classes and exceptions."""
 
+from claude_task_master.core import console
 from claude_task_master.core.agent import (
     AgentError,
     AgentWrapper,
@@ -54,6 +55,8 @@ from claude_task_master.core.state import (
 )
 
 __all__ = [
+    # Console module
+    "console",
     # Credential exceptions
     "CredentialError",
     "CredentialNotFoundError",

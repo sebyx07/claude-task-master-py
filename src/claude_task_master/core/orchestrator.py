@@ -1,6 +1,7 @@
 """Work Loop Orchestrator - Main loop driving work sessions until completion."""
 
 
+from . import console
 from .agent import AgentError, AgentWrapper
 from .planner import Planner
 from .state import StateError, StateManager, TaskState
@@ -149,19 +150,19 @@ class WorkLoopOrchestrator:
         try:
             state = self.state_manager.load_state()
         except StateError as e:
-            print(f"⚠️  State loading error: {e.message}")
+            console.warning(f"State loading error: {e.message}")
             recovered_state = self._attempt_state_recovery()
             if recovered_state:
-                print("✓ State recovered from backup")
+                console.success("State recovered from backup")
                 state = recovered_state
             else:
-                print("❌ State recovery failed - cannot continue")
+                console.error("State recovery failed - cannot continue")
                 raise StateRecoveryError("State file corrupted and no backup available", e) from e
 
         # Check if we've exceeded max sessions
         if state.options.max_sessions and state.session_count >= state.options.max_sessions:
             error = MaxSessionsReachedError(state.options.max_sessions, state.session_count)
-            print(f"⚠️  {error.message}")
+            console.warning(error.message)
             return 1  # Blocked
 
         try:
@@ -170,28 +171,28 @@ class WorkLoopOrchestrator:
                 try:
                     self._run_work_session(state)
                 except NoPlanFoundError as e:
-                    print(f"❌ {e.message}")
+                    console.error(e.message)
                     state.status = "failed"
                     self.state_manager.save_state(state)
                     return 1
                 except NoTasksFoundError as e:
                     # No tasks is actually a success case (nothing to do)
-                    print(f"ℹ️  {e.message}")
+                    console.info(e.message)
                     break
                 except WorkSessionError as e:
                     # Log error details but continue - agent may have partially completed
-                    print(f"⚠️  Work session error: {e.message}")
+                    console.warning(f"Work session error: {e.message}")
                     if e.details:
-                        print(f"   {e.details}")
+                        console.detail(e.details)
                     # Create a backup before potentially continuing
                     self.state_manager.create_state_backup()
                     # Re-raise to be handled by outer exception handler
                     raise
                 except AgentError as e:
                     # Agent-specific errors - wrap with context
-                    print(f"❌ Agent error during work session: {e.message}")
+                    console.error(f"Agent error during work session: {e.message}")
                     if e.details:
-                        print(f"   {e.details}")
+                        console.detail(e.details)
                     raise WorkSessionError(
                         state.current_task_index,
                         self._get_current_task_description(state),
@@ -211,7 +212,7 @@ class WorkLoopOrchestrator:
                 # Check session limit again
                 if state.options.max_sessions and state.session_count >= state.options.max_sessions:
                     error = MaxSessionsReachedError(state.options.max_sessions, state.session_count)
-                    print(f"⚠️  {error.message}")
+                    console.warning(error.message)
                     state.status = "blocked"
                     self.state_manager.save_state(state)
                     return 1
@@ -222,61 +223,62 @@ class WorkLoopOrchestrator:
                     state.status = "success"
                     self.state_manager.save_state(state)
                     self.state_manager.cleanup_on_success(state.run_id)
-                    print("✓ All tasks completed successfully!")
+                    console.success("All tasks completed successfully!")
                     return 0  # Success
                 else:
                     self.state_manager.load_criteria() or "unknown"
-                    print("⚠️  Success criteria verification failed")
+                    console.warning("Success criteria verification failed")
                     state.status = "blocked"
                     self.state_manager.save_state(state)
                     return 1  # Blocked
             except Exception as e:
-                print(f"⚠️  Error during success verification: {e}")
+                console.warning(f"Error during success verification: {e}")
                 # Still mark as blocked since we can't verify
                 state.status = "blocked"
                 self.state_manager.save_state(state)
                 return 1
 
         except KeyboardInterrupt:
-            print("\n⏸️  Interrupted by user - pausing...")
+            console.newline()
+            console.warning("Interrupted by user - pausing...")
             state.status = "paused"
             self.state_manager.save_state(state)
             # Create a backup when pausing
             backup_path = self.state_manager.create_state_backup()
             if backup_path:
-                print(f"   State backup saved: {backup_path}")
+                console.detail(f"State backup saved: {backup_path}")
             return 2  # User interrupted
 
         except OrchestratorError as e:
             # Known orchestrator errors - already have good messages
-            print(f"❌ Orchestrator error: {e.message}")
+            console.error(f"Orchestrator error: {e.message}")
             if e.details:
-                print(f"   {e.details}")
+                console.detail(e.details)
             state.status = "failed"
             self.state_manager.save_state(state)
             return 1  # Error
 
         except StateError as e:
             # State-related errors
-            print(f"❌ State error: {e.message}")
+            console.error(f"State error: {e.message}")
             if e.details:
-                print(f"   {e.details}")
+                console.detail(e.details)
             # Try to save state anyway
             try:
                 state.status = "failed"
                 self.state_manager.save_state(state)
             except Exception:
-                print("   Warning: Could not save failed state")
+                console.detail("Warning: Could not save failed state")
             return 1  # Error
 
         except Exception as e:
             # Unexpected errors - provide detailed debugging info
             error_type = type(e).__name__
             error_msg = str(e)
-            print(f"❌ Unexpected error ({error_type}): {error_msg}")
-            print(f"   Task index: {state.current_task_index}")
-            print(f"   Session count: {state.session_count}")
-            print(f"   Status before error: {state.status}")
+            console.error(f"Unexpected error ({error_type}): {error_msg}")
+            console.detail(f"Task index: {state.current_task_index}")
+            console.detail(f"Session count: {state.session_count}")
+            console.detail(f"Status before error: {state.status}")
 
             # Try to save state with failure status
             try:
@@ -285,9 +287,9 @@ class WorkLoopOrchestrator:
                 # Create a backup for debugging
                 backup_path = self.state_manager.create_state_backup()
                 if backup_path:
-                    print(f"   State backup saved: {backup_path}")
+                    console.detail(f"State backup saved: {backup_path}")
             except Exception as save_error:
-                print(f"   Warning: Could not save failed state: {save_error}")
+                console.detail(f"Warning: Could not save failed state: {save_error}")
 
             return 1  # Error
 
@@ -380,7 +382,8 @@ class WorkLoopOrchestrator:
 
         # Check if task is already complete
         if self._is_task_complete(plan, state.current_task_index):
-            print(f"\n✓ Task #{state.current_task_index + 1} already complete: {current_task}")
+            console.newline()
+            console.success(f"Task #{state.current_task_index + 1} already complete: {current_task}")
             state.current_task_index += 1
             self.state_manager.save_state(state)
             return
@@ -389,14 +392,14 @@ class WorkLoopOrchestrator:
         try:
             context = self.state_manager.load_context()
         except Exception as e:
-            print(f"⚠️  Warning: Could not load context: {e}")
+            console.warning(f"Could not load context: {e}")
             context = ""
 
         # Build task description
         try:
             goal = self.state_manager.load_goal()
         except Exception as e:
-            print(f"⚠️  Warning: Could not load goal: {e}")
+            console.warning(f"Could not load goal: {e}")
             goal = "Complete the assigned task"
 
         task_description = f"""Goal: {goal}
@@ -405,7 +408,8 @@ Current Task (#{state.current_task_index + 1}): {current_task}
 
 Please complete this task."""
 
-        print(f"\nWorking on task #{state.current_task_index + 1}: {current_task}")
+        console.newline()
+        console.info(f"Working on task #{state.current_task_index + 1}: {current_task}")
 
         # Run agent work session with error wrapping
         try:
@@ -463,13 +467,13 @@ Please complete this task."""
         try:
             self.state_manager.save_progress(progress)
         except Exception as e:
-            print(f"⚠️  Warning: Could not save progress: {e}")
+            console.warning(f"Could not save progress: {e}")
 
         # Mark task as complete and move to next
         try:
             self._mark_task_complete(plan, state.current_task_index)
         except Exception as e:
-            print(f"⚠️  Warning: Could not mark task as complete: {e}")
+            console.warning(f"Could not mark task as complete: {e}")
 
         state.current_task_index += 1
         self.state_manager.save_state(state)

@@ -5,6 +5,8 @@ import os
 from enum import Enum
 from typing import Any
 
+from . import console
+
 # =============================================================================
 # Custom Exception Classes
 # =============================================================================
@@ -342,17 +344,19 @@ Format your response clearly."""
                 if attempt < self.max_retries:
                     # Calculate backoff with jitter
                     sleep_time = min(backoff, self.max_backoff)
-                    print(
-                        f"\n⚠️  Transient error (attempt {attempt + 1}/{self.max_retries + 1}): {e.message}",
+                    console.newline()
+                    console.warning(
+                        f"Transient error (attempt {attempt + 1}/{self.max_retries + 1}): {e.message}",
                         flush=True,
                     )
-                    print(f"   Retrying in {sleep_time:.1f} seconds...", flush=True)
+                    console.detail(f"Retrying in {sleep_time:.1f} seconds...", flush=True)
                     await asyncio.sleep(sleep_time)
                     backoff *= self.DEFAULT_BACKOFF_MULTIPLIER
                 else:
                     # Out of retries
-                    print(
-                        f"\n❌ Failed after {self.max_retries + 1} attempts: {e.message}",
+                    console.newline()
+                    console.error(
+                        f"Failed after {self.max_retries + 1} attempts: {e.message}",
                         flush=True,
                     )
                     raise
@@ -452,24 +456,25 @@ Format your response clearly."""
                 block_type = type(block).__name__
 
                 if block_type == "TextBlock":
-                    # Claude's text response
-                    print(block.text, end="", flush=True)
+                    # Claude's text response - stream without prefix
+                    console.stream(block.text)
                     result_text += block.text
                 elif block_type == "ToolUseBlock":
                     # Tool being invoked
-                    print(f"\n🔧 Using tool: {block.name}", flush=True)
+                    console.newline()
+                    console.tool(f"Using tool: {block.name}", flush=True)
                 elif block_type == "ToolResultBlock":
                     # Tool result - show completion
                     if block.is_error:
-                        print("❌ Tool error\n", flush=True)
+                        console.error("Tool error", flush=True)
                     else:
-                        print("✓ Tool completed\n", flush=True)
+                        console.success("Tool completed", flush=True)
 
         # Collect final result from ResultMessage
         if message_type == "ResultMessage":
             if hasattr(message, "result"):
                 result_text = message.result
-                print("\n")  # Add newline after completion
+                console.newline()  # Add newline after completion
 
         return result_text
 
