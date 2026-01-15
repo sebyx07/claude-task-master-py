@@ -1,9 +1,131 @@
 """Agent Wrapper - Encapsulates all Claude Agent SDK interactions."""
 
-from typing import Any, Optional
-from enum import Enum
 import asyncio
 import os
+from enum import Enum
+from typing import Any
+
+# =============================================================================
+# Custom Exception Classes
+# =============================================================================
+
+
+class AgentError(Exception):
+    """Base exception for all agent-related errors."""
+
+    def __init__(self, message: str, details: str | None = None):
+        self.message = message
+        self.details = details
+        super().__init__(self._format_message())
+
+    def _format_message(self) -> str:
+        if self.details:
+            return f"{self.message}\n  Details: {self.details}"
+        return self.message
+
+
+class SDKImportError(AgentError):
+    """Raised when the Claude Agent SDK cannot be imported."""
+
+    def __init__(self, original_error: Exception | None = None):
+        self.original_error = original_error
+        details = str(original_error) if original_error else None
+        super().__init__(
+            "claude-agent-sdk not installed or cannot be imported",
+            details or "Install with: pip install claude-agent-sdk",
+        )
+
+
+class SDKInitializationError(AgentError):
+    """Raised when SDK components cannot be initialized."""
+
+    def __init__(self, component: str, original_error: Exception):
+        self.component = component
+        self.original_error = original_error
+        super().__init__(
+            f"Failed to initialize SDK component: {component}",
+            str(original_error),
+        )
+
+
+class QueryExecutionError(AgentError):
+    """Raised when a query execution fails."""
+
+    def __init__(self, message: str, original_error: Exception | None = None):
+        self.original_error = original_error
+        details = str(original_error) if original_error else None
+        super().__init__(message, details)
+
+
+class APIRateLimitError(QueryExecutionError):
+    """Raised when API rate limit is exceeded."""
+
+    def __init__(self, retry_after: float | None = None, original_error: Exception | None = None):
+        self.retry_after = retry_after
+        message = "API rate limit exceeded"
+        if retry_after:
+            message += f" (retry after {retry_after} seconds)"
+        super().__init__(message, original_error)
+
+
+class APIConnectionError(QueryExecutionError):
+    """Raised when there's a connection error to the API."""
+
+    def __init__(self, original_error: Exception):
+        super().__init__(
+            "Failed to connect to Claude API",
+            original_error,
+        )
+
+
+class APITimeoutError(QueryExecutionError):
+    """Raised when API request times out."""
+
+    def __init__(self, timeout: float, original_error: Exception | None = None):
+        self.timeout = timeout
+        super().__init__(
+            f"API request timed out after {timeout} seconds",
+            original_error,
+        )
+
+
+class APIAuthenticationError(QueryExecutionError):
+    """Raised when API authentication fails."""
+
+    def __init__(self, original_error: Exception | None = None):
+        super().__init__(
+            "API authentication failed - check your credentials",
+            original_error,
+        )
+
+
+class APIServerError(QueryExecutionError):
+    """Raised when the API server returns a 5xx error."""
+
+    def __init__(self, status_code: int, original_error: Exception | None = None):
+        self.status_code = status_code
+        super().__init__(
+            f"API server error (HTTP {status_code})",
+            original_error,
+        )
+
+
+class WorkingDirectoryError(AgentError):
+    """Raised when there's an issue with the working directory."""
+
+    def __init__(self, path: str, operation: str, original_error: Exception):
+        self.path = path
+        self.operation = operation
+        self.original_error = original_error
+        super().__init__(
+            f"Failed to {operation} working directory: {path}",
+            str(original_error),
+        )
+
+
+# =============================================================================
+# Enums
+# =============================================================================
 
 
 class ModelType(Enum):
@@ -24,24 +146,87 @@ class ToolConfig(Enum):
 class AgentWrapper:
     """Wraps Claude Agent SDK for task execution."""
 
-    def __init__(self, access_token: str, model: ModelType, working_dir: str = "."):
-        """Initialize agent wrapper."""
+    # Retry configuration for transient errors
+    DEFAULT_MAX_RETRIES = 3
+    DEFAULT_INITIAL_BACKOFF = 1.0  # seconds
+    DEFAULT_MAX_BACKOFF = 30.0  # seconds
+    DEFAULT_BACKOFF_MULTIPLIER = 2.0
+
+    # Transient error types that should be retried
+    TRANSIENT_ERRORS = (
+        APIRateLimitError,
+        APIConnectionError,
+        APITimeoutError,
+        APIServerError,
+    )
+
+    def __init__(
+        self,
+        access_token: str,
+        model: ModelType,
+        working_dir: str = ".",
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        initial_backoff: float = DEFAULT_INITIAL_BACKOFF,
+        max_backoff: float = DEFAULT_MAX_BACKOFF,
+    ):
+        """Initialize agent wrapper.
+
+        Args:
+            access_token: OAuth access token for Claude API.
+            model: The Claude model to use.
+            working_dir: Working directory for file operations.
+            max_retries: Maximum number of retries for transient errors.
+            initial_backoff: Initial backoff time in seconds.
+            max_backoff: Maximum backoff time in seconds.
+
+        Raises:
+            SDKImportError: If claude-agent-sdk is not installed.
+            SDKInitializationError: If SDK components cannot be initialized.
+        """
         self.access_token = access_token
         self.model = model
         self.working_dir = working_dir
+        self.max_retries = max_retries
+        self.initial_backoff = initial_backoff
+        self.max_backoff = max_backoff
 
-        # Import Claude Agent SDK
-        try:
-            from claude_agent_sdk import query, ClaudeAgentOptions
-            self.query = query
-            self.options_class = ClaudeAgentOptions
-        except ImportError:
-            raise RuntimeError(
-                "claude-agent-sdk not installed. Install with: pip install claude-agent-sdk"
-            )
+        # Import Claude Agent SDK with improved error handling
+        self._import_sdk()
 
         # Note: The Claude Agent SDK will automatically use credentials from
         # ~/.claude/.credentials.json if no ANTHROPIC_API_KEY is set
+
+    def _import_sdk(self) -> None:
+        """Import and initialize the Claude Agent SDK.
+
+        Raises:
+            SDKImportError: If the SDK cannot be imported.
+            SDKInitializationError: If SDK components are missing or invalid.
+        """
+        try:
+            import claude_agent_sdk
+        except ImportError as e:
+            raise SDKImportError(e) from e
+        except Exception as e:
+            raise SDKImportError(e) from e
+
+        # Validate required components exist
+        try:
+            self.query = claude_agent_sdk.query
+        except AttributeError as e:
+            raise SDKInitializationError("query", e) from e
+
+        try:
+            self.options_class = claude_agent_sdk.ClaudeAgentOptions
+        except AttributeError as e:
+            raise SDKInitializationError("ClaudeAgentOptions", e) from e
+
+        # Verify the query is callable
+        if not callable(self.query):
+            raise SDKInitializationError(
+                "query",
+                ValueError("query must be callable"),
+            )
 
     def run_planning_phase(
         self, goal: str, context: str = ""
@@ -67,7 +252,7 @@ class AgentWrapper:
         self,
         task_description: str,
         context: str = "",
-        pr_comments: Optional[str] = None,
+        pr_comments: str | None = None,
     ) -> dict[str, Any]:
         """Run a work session with full tools."""
         # Build prompt for work session
@@ -116,62 +301,220 @@ Format your response clearly."""
         }
 
     async def _run_query(self, prompt: str, tools: list[str]) -> str:
-        """Run query and collect result."""
-        result_text = ""
+        """Run query with retry logic for transient errors.
 
-        # Change to working directory for the query
-        import os
+        Args:
+            prompt: The prompt to send to the model.
+            tools: List of tools to enable.
+
+        Returns:
+            The result text from the query.
+
+        Raises:
+            WorkingDirectoryError: If working directory cannot be accessed.
+            QueryExecutionError: If the query fails after all retries.
+            APIAuthenticationError: If authentication fails (not retried).
+        """
+        return await self._run_query_with_retry(prompt, tools)
+
+    async def _run_query_with_retry(self, prompt: str, tools: list[str]) -> str:
+        """Execute query with exponential backoff retry for transient errors.
+
+        Args:
+            prompt: The prompt to send to the model.
+            tools: List of tools to enable.
+
+        Returns:
+            The result text from the query.
+
+        Raises:
+            WorkingDirectoryError: If working directory cannot be accessed.
+            QueryExecutionError: If the query fails after all retries.
+        """
+        last_error: Exception | None = None
+        backoff = self.initial_backoff
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                return await self._execute_query(prompt, tools)
+            except self.TRANSIENT_ERRORS as e:
+                last_error = e
+                if attempt < self.max_retries:
+                    # Calculate backoff with jitter
+                    sleep_time = min(backoff, self.max_backoff)
+                    print(
+                        f"\n⚠️  Transient error (attempt {attempt + 1}/{self.max_retries + 1}): {e.message}",
+                        flush=True,
+                    )
+                    print(f"   Retrying in {sleep_time:.1f} seconds...", flush=True)
+                    await asyncio.sleep(sleep_time)
+                    backoff *= self.DEFAULT_BACKOFF_MULTIPLIER
+                else:
+                    # Out of retries
+                    print(
+                        f"\n❌ Failed after {self.max_retries + 1} attempts: {e.message}",
+                        flush=True,
+                    )
+                    raise
+            except (APIAuthenticationError, SDKImportError, SDKInitializationError):
+                # These errors should not be retried
+                raise
+            except AgentError:
+                # Other agent errors - re-raise as is
+                raise
+            except Exception as e:
+                # Unexpected errors - wrap and raise
+                raise QueryExecutionError(
+                    f"Unexpected error during query execution: {type(e).__name__}",
+                    e,
+                ) from e
+
+        # Should not reach here, but just in case
+        if last_error:
+            raise last_error
+        raise QueryExecutionError("Query failed with unknown error")
+
+    async def _execute_query(self, prompt: str, tools: list[str]) -> str:
+        """Execute a single query attempt.
+
+        Args:
+            prompt: The prompt to send to the model.
+            tools: List of tools to enable.
+
+        Returns:
+            The result text from the query.
+
+        Raises:
+            WorkingDirectoryError: If working directory cannot be accessed.
+            APIRateLimitError: If rate limited.
+            APIConnectionError: If connection fails.
+            APITimeoutError: If request times out.
+            APIAuthenticationError: If authentication fails.
+            APIServerError: If server returns 5xx error.
+            QueryExecutionError: For other query errors.
+        """
+        result_text = ""
         original_dir = os.getcwd()
 
         try:
-            os.chdir(self.working_dir)
+            # Change to working directory
+            try:
+                os.chdir(self.working_dir)
+            except FileNotFoundError as e:
+                raise WorkingDirectoryError(self.working_dir, "change to", e) from e
+            except PermissionError as e:
+                raise WorkingDirectoryError(self.working_dir, "access", e) from e
+            except OSError as e:
+                raise WorkingDirectoryError(self.working_dir, "change to", e) from e
 
-            options = self.options_class(
-                allowed_tools=tools,
-                permission_mode="bypassPermissions",  # For MVP, bypass permissions
-            )
+            # Create options
+            try:
+                options = self.options_class(
+                    allowed_tools=tools,
+                    permission_mode="bypassPermissions",  # For MVP, bypass permissions
+                )
+            except Exception as e:
+                raise SDKInitializationError("ClaudeAgentOptions", e) from e
 
-            async for message in self.query(prompt=prompt, options=options):
-                # Handle different message types from claude-agent-sdk
-                message_type = type(message).__name__
-
-                if hasattr(message, "content") and message.content:
-                    # Assistant or User messages with content
-                    for block in message.content:
-                        block_type = type(block).__name__
-
-                        if block_type == "TextBlock":
-                            # Claude's text response
-                            print(block.text, end="", flush=True)
-                            result_text += block.text
-                        elif block_type == "ToolUseBlock":
-                            # Tool being invoked
-                            print(f"\n🔧 Using tool: {block.name}", flush=True)
-                        elif block_type == "ToolResultBlock":
-                            # Tool result - show completion
-                            if block.is_error:
-                                print(f"❌ Tool error\n", flush=True)
-                            else:
-                                print(f"✓ Tool completed\n", flush=True)
-
-                # Collect final result from ResultMessage
-                if message_type == "ResultMessage":
-                    if hasattr(message, "result"):
-                        result_text = message.result
-                        print("\n")  # Add newline after completion
-
-        except Exception as e:
-            # Print full exception details
-            import traceback
-            print(f"\n\n❌ Exception in _run_query: {type(e).__name__}: {e}", flush=True)
-            print(traceback.format_exc(), flush=True)
-            raise
+            # Execute query
+            try:
+                async for message in self.query(prompt=prompt, options=options):
+                    result_text = self._process_message(message, result_text)
+            except Exception as e:
+                # Classify the error
+                raise self._classify_api_error(e) from e
 
         finally:
             # Always restore original directory
-            os.chdir(original_dir)
+            try:
+                os.chdir(original_dir)
+            except OSError:
+                # Best effort to restore directory - don't mask original error
+                pass
 
         return result_text
+
+    def _process_message(self, message: Any, result_text: str) -> str:
+        """Process a message from the query stream.
+
+        Args:
+            message: The message to process.
+            result_text: The accumulated result text.
+
+        Returns:
+            Updated result text.
+        """
+        message_type = type(message).__name__
+
+        if hasattr(message, "content") and message.content:
+            # Assistant or User messages with content
+            for block in message.content:
+                block_type = type(block).__name__
+
+                if block_type == "TextBlock":
+                    # Claude's text response
+                    print(block.text, end="", flush=True)
+                    result_text += block.text
+                elif block_type == "ToolUseBlock":
+                    # Tool being invoked
+                    print(f"\n🔧 Using tool: {block.name}", flush=True)
+                elif block_type == "ToolResultBlock":
+                    # Tool result - show completion
+                    if block.is_error:
+                        print("❌ Tool error\n", flush=True)
+                    else:
+                        print("✓ Tool completed\n", flush=True)
+
+        # Collect final result from ResultMessage
+        if message_type == "ResultMessage":
+            if hasattr(message, "result"):
+                result_text = message.result
+                print("\n")  # Add newline after completion
+
+        return result_text
+
+    def _classify_api_error(self, error: Exception) -> AgentError:
+        """Classify an API error into a specific error type.
+
+        Args:
+            error: The original exception.
+
+        Returns:
+            A classified AgentError subclass.
+        """
+        error_str = str(error).lower()
+        error_type = type(error).__name__
+
+        # Check for rate limiting
+        if "rate" in error_str and "limit" in error_str:
+            # Try to extract retry-after if present
+            retry_after = None
+            if hasattr(error, "retry_after"):
+                retry_after = error.retry_after
+            return APIRateLimitError(retry_after, error)
+
+        # Check for authentication errors
+        if any(kw in error_str for kw in ["auth", "unauthorized", "403", "401"]):
+            return APIAuthenticationError(error)
+
+        # Check for timeout errors
+        if "timeout" in error_str or error_type in ("TimeoutError", "AsyncioTimeoutError"):
+            return APITimeoutError(30.0, error)
+
+        # Check for connection errors
+        if any(kw in error_str for kw in ["connect", "connection", "network"]):
+            return APIConnectionError(error)
+
+        # Check for server errors (5xx)
+        if "500" in error_str or "502" in error_str or "503" in error_str or "504" in error_str:
+            # Try to extract status code
+            for code in [500, 502, 503, 504]:
+                if str(code) in error_str:
+                    return APIServerError(code, error)
+            return APIServerError(500, error)
+
+        # Default to generic query execution error
+        return QueryExecutionError(f"API error: {error}", error)
 
     def get_tools_for_phase(self, phase: str) -> list[str]:
         """Get appropriate tools for the given phase."""
@@ -233,7 +576,7 @@ Remember: The task list will be executed sequentially, so order matters."""
         return prompt
 
     def _build_work_prompt(
-        self, task_description: str, context: str, pr_comments: Optional[str]
+        self, task_description: str, context: str, pr_comments: str | None
     ) -> str:
         """Build prompt for work session."""
         prompt = f"""You are Claude Task Master working on a specific task.

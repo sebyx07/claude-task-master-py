@@ -14,8 +14,24 @@ from claude_task_master.core.credentials import (
     CredentialManager,
 )
 
+from claude_task_master.core.agent import (
+    AgentError,
+    SDKImportError,
+    SDKInitializationError,
+    QueryExecutionError,
+    APIRateLimitError,
+    APIConnectionError,
+    APITimeoutError,
+    APIAuthenticationError,
+    APIServerError,
+    WorkingDirectoryError,
+    ModelType,
+    ToolConfig,
+    AgentWrapper,
+)
+
 __all__ = [
-    # Exception classes
+    # Credential exceptions
     "CredentialError",
     "CredentialNotFoundError",
     "InvalidCredentialsError",
@@ -25,7 +41,22 @@ __all__ = [
     "NetworkConnectionError",
     "TokenRefreshHTTPError",
     "InvalidTokenResponseError",
-    # Main classes
+    # Credential classes
     "Credentials",
     "CredentialManager",
+    # Agent exceptions
+    "AgentError",
+    "SDKImportError",
+    "SDKInitializationError",
+    "QueryExecutionError",
+    "APIRateLimitError",
+    "APIConnectionError",
+    "APITimeoutError",
+    "APIAuthenticationError",
+    "APIServerError",
+    "WorkingDirectoryError",
+    # Agent classes
+    "ModelType",
+    "ToolConfig",
+    "AgentWrapper",
 ]

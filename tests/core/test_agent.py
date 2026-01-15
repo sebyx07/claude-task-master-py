@@ -6,7 +6,223 @@ from pathlib import Path
 import asyncio
 import os
 
-from claude_task_master.core.agent import AgentWrapper, ModelType, ToolConfig
+from claude_task_master.core.agent import (
+    AgentWrapper,
+    ModelType,
+    ToolConfig,
+    AgentError,
+    SDKImportError,
+    SDKInitializationError,
+    QueryExecutionError,
+    APIRateLimitError,
+    APIConnectionError,
+    APITimeoutError,
+    APIAuthenticationError,
+    APIServerError,
+    WorkingDirectoryError,
+)
+
+
+# =============================================================================
+# Exception Class Tests
+# =============================================================================
+
+
+class TestAgentError:
+    """Tests for AgentError base exception class."""
+
+    def test_agent_error_basic(self):
+        """Test AgentError with message only."""
+        error = AgentError("Test error")
+        assert error.message == "Test error"
+        assert error.details is None
+        assert str(error) == "Test error"
+
+    def test_agent_error_with_details(self):
+        """Test AgentError with message and details."""
+        error = AgentError("Test error", "Additional details")
+        assert error.message == "Test error"
+        assert error.details == "Additional details"
+        assert "Test error" in str(error)
+        assert "Additional details" in str(error)
+
+    def test_agent_error_inheritance(self):
+        """Test AgentError inherits from Exception."""
+        error = AgentError("Test")
+        assert isinstance(error, Exception)
+
+
+class TestSDKImportError:
+    """Tests for SDKImportError exception class."""
+
+    def test_sdk_import_error_basic(self):
+        """Test SDKImportError without original error."""
+        error = SDKImportError()
+        assert "claude-agent-sdk not installed" in error.message
+        assert error.original_error is None
+
+    def test_sdk_import_error_with_original(self):
+        """Test SDKImportError with original exception."""
+        original = ImportError("No module named 'claude_agent_sdk'")
+        error = SDKImportError(original)
+        assert error.original_error == original
+        assert "claude_agent_sdk" in str(error)
+
+    def test_sdk_import_error_inheritance(self):
+        """Test SDKImportError inherits from AgentError."""
+        error = SDKImportError()
+        assert isinstance(error, AgentError)
+
+
+class TestSDKInitializationError:
+    """Tests for SDKInitializationError exception class."""
+
+    def test_sdk_init_error_basic(self):
+        """Test SDKInitializationError with component and error."""
+        original = AttributeError("query not found")
+        error = SDKInitializationError("query", original)
+        assert error.component == "query"
+        assert error.original_error == original
+        assert "query" in error.message
+
+    def test_sdk_init_error_inheritance(self):
+        """Test SDKInitializationError inherits from AgentError."""
+        error = SDKInitializationError("test", ValueError("test"))
+        assert isinstance(error, AgentError)
+
+
+class TestQueryExecutionError:
+    """Tests for QueryExecutionError exception class."""
+
+    def test_query_execution_error_basic(self):
+        """Test QueryExecutionError with message only."""
+        error = QueryExecutionError("Query failed")
+        assert error.message == "Query failed"
+        assert error.original_error is None
+
+    def test_query_execution_error_with_original(self):
+        """Test QueryExecutionError with original exception."""
+        original = RuntimeError("API error")
+        error = QueryExecutionError("Query failed", original)
+        assert error.original_error == original
+
+    def test_query_execution_error_inheritance(self):
+        """Test QueryExecutionError inherits from AgentError."""
+        error = QueryExecutionError("Test")
+        assert isinstance(error, AgentError)
+
+
+class TestAPIRateLimitError:
+    """Tests for APIRateLimitError exception class."""
+
+    def test_rate_limit_error_basic(self):
+        """Test APIRateLimitError without retry_after."""
+        error = APIRateLimitError()
+        assert "rate limit" in error.message.lower()
+        assert error.retry_after is None
+
+    def test_rate_limit_error_with_retry_after(self):
+        """Test APIRateLimitError with retry_after."""
+        error = APIRateLimitError(retry_after=30.0)
+        assert error.retry_after == 30.0
+        assert "30" in error.message
+
+    def test_rate_limit_error_inheritance(self):
+        """Test APIRateLimitError inherits from QueryExecutionError."""
+        error = APIRateLimitError()
+        assert isinstance(error, QueryExecutionError)
+        assert isinstance(error, AgentError)
+
+
+class TestAPIConnectionError:
+    """Tests for APIConnectionError exception class."""
+
+    def test_connection_error_basic(self):
+        """Test APIConnectionError with original exception."""
+        original = ConnectionError("Connection refused")
+        error = APIConnectionError(original)
+        assert "connect" in error.message.lower()
+        assert error.original_error == original
+
+    def test_connection_error_inheritance(self):
+        """Test APIConnectionError inherits from QueryExecutionError."""
+        error = APIConnectionError(ConnectionError("test"))
+        assert isinstance(error, QueryExecutionError)
+
+
+class TestAPITimeoutError:
+    """Tests for APITimeoutError exception class."""
+
+    def test_timeout_error_basic(self):
+        """Test APITimeoutError with timeout value."""
+        error = APITimeoutError(timeout=30.0)
+        assert error.timeout == 30.0
+        assert "30" in error.message
+        assert "timed out" in error.message.lower()
+
+    def test_timeout_error_inheritance(self):
+        """Test APITimeoutError inherits from QueryExecutionError."""
+        error = APITimeoutError(timeout=10.0)
+        assert isinstance(error, QueryExecutionError)
+
+
+class TestAPIAuthenticationError:
+    """Tests for APIAuthenticationError exception class."""
+
+    def test_auth_error_basic(self):
+        """Test APIAuthenticationError without original error."""
+        error = APIAuthenticationError()
+        assert "authentication" in error.message.lower()
+
+    def test_auth_error_with_original(self):
+        """Test APIAuthenticationError with original exception."""
+        original = PermissionError("401 Unauthorized")
+        error = APIAuthenticationError(original)
+        assert error.original_error == original
+
+    def test_auth_error_inheritance(self):
+        """Test APIAuthenticationError inherits from QueryExecutionError."""
+        error = APIAuthenticationError()
+        assert isinstance(error, QueryExecutionError)
+
+
+class TestAPIServerError:
+    """Tests for APIServerError exception class."""
+
+    def test_server_error_basic(self):
+        """Test APIServerError with status code."""
+        error = APIServerError(status_code=500)
+        assert error.status_code == 500
+        assert "500" in error.message
+
+    def test_server_error_502(self):
+        """Test APIServerError with 502 status."""
+        error = APIServerError(status_code=502)
+        assert error.status_code == 502
+        assert "502" in error.message
+
+    def test_server_error_inheritance(self):
+        """Test APIServerError inherits from QueryExecutionError."""
+        error = APIServerError(status_code=500)
+        assert isinstance(error, QueryExecutionError)
+
+
+class TestWorkingDirectoryError:
+    """Tests for WorkingDirectoryError exception class."""
+
+    def test_working_dir_error_basic(self):
+        """Test WorkingDirectoryError with all parameters."""
+        original = FileNotFoundError("Directory not found")
+        error = WorkingDirectoryError("/test/dir", "change to", original)
+        assert error.path == "/test/dir"
+        assert error.operation == "change to"
+        assert error.original_error == original
+        assert "/test/dir" in error.message
+
+    def test_working_dir_error_inheritance(self):
+        """Test WorkingDirectoryError inherits from AgentError."""
+        error = WorkingDirectoryError("/test", "access", OSError("test"))
+        assert isinstance(error, AgentError)
 
 
 # =============================================================================
@@ -133,10 +349,10 @@ class TestAgentWrapperInitialization:
                 assert agent.model == model
 
     def test_init_without_claude_sdk_raises_error(self):
-        """Test initialization without claude-agent-sdk raises RuntimeError."""
+        """Test initialization without claude-agent-sdk raises SDKImportError."""
         # Patch the import to simulate missing module
         with patch.dict("sys.modules", {"claude_agent_sdk": None}):
-            with pytest.raises(RuntimeError) as exc_info:
+            with pytest.raises(SDKImportError) as exc_info:
                 # Force the import to fail
                 with patch("builtins.__import__", side_effect=ImportError):
                     AgentWrapper(
@@ -702,7 +918,7 @@ class TestAgentWrapperRunQuery:
 
         agent.query = mock_query_gen
 
-        with pytest.raises(ValueError):
+        with pytest.raises(QueryExecutionError):
             await agent._run_query("test prompt", ["Read"])
 
         # Should be back in original directory
@@ -1027,3 +1243,497 @@ Also consider:
 
         # Note: the check is case-insensitive because of .lower()
         assert result["success"] is True
+
+
+# =============================================================================
+# AgentWrapper Retry Logic Tests
+# =============================================================================
+
+
+class TestAgentWrapperRetryLogic:
+    """Tests for retry logic in AgentWrapper."""
+
+    @pytest.fixture
+    def agent(self, temp_dir):
+        """Create an AgentWrapper instance for testing."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                working_dir=str(temp_dir),
+                max_retries=2,
+                initial_backoff=0.1,  # Fast backoff for tests
+                max_backoff=0.5,
+            )
+        return agent
+
+    @pytest.mark.asyncio
+    async def test_retry_on_rate_limit_error(self, agent, temp_dir):
+        """Test retry logic on rate limit error."""
+        call_count = 0
+
+        async def mock_query_gen(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise Exception("rate limit exceeded")
+            yield MagicMock(content=None)
+
+        agent.query = mock_query_gen
+
+        await agent._run_query("test prompt", ["Read"])
+
+        # Should have retried twice before succeeding
+        assert call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_retry_on_connection_error(self, agent, temp_dir):
+        """Test retry logic on connection error."""
+        call_count = 0
+
+        async def mock_query_gen(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise Exception("connection refused")
+            yield MagicMock(content=None)
+
+        agent.query = mock_query_gen
+
+        await agent._run_query("test prompt", ["Read"])
+
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_retry_on_timeout_error(self, agent, temp_dir):
+        """Test retry logic on timeout error."""
+        call_count = 0
+
+        async def mock_query_gen(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise TimeoutError("Request timeout")
+            yield MagicMock(content=None)
+
+        agent.query = mock_query_gen
+
+        await agent._run_query("test prompt", ["Read"])
+
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_retry_on_server_error_500(self, agent, temp_dir):
+        """Test retry logic on 500 server error."""
+        call_count = 0
+
+        async def mock_query_gen(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 2:
+                raise Exception("HTTP 500 Internal Server Error")
+            yield MagicMock(content=None)
+
+        agent.query = mock_query_gen
+
+        await agent._run_query("test prompt", ["Read"])
+
+        assert call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_no_retry_on_auth_error(self, agent, temp_dir):
+        """Test authentication errors are not retried."""
+        call_count = 0
+
+        async def mock_query_gen(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            raise Exception("401 Unauthorized")
+            yield  # Make it an async generator
+
+        agent.query = mock_query_gen
+
+        with pytest.raises(APIAuthenticationError):
+            await agent._run_query("test prompt", ["Read"])
+
+        # Should only be called once - no retry
+        assert call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_max_retries_exceeded(self, agent, temp_dir):
+        """Test that error is raised after max retries."""
+        call_count = 0
+
+        async def mock_query_gen(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            raise Exception("rate limit exceeded")
+            yield  # Make it an async generator
+
+        agent.query = mock_query_gen
+
+        with pytest.raises(APIRateLimitError):
+            await agent._run_query("test prompt", ["Read"])
+
+        # Should be called max_retries + 1 times
+        assert call_count == 3  # 2 retries + 1 initial
+
+    @pytest.mark.asyncio
+    async def test_successful_first_attempt_no_retry(self, agent, temp_dir):
+        """Test no retry on successful first attempt."""
+        call_count = 0
+
+        async def mock_query_gen(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            yield MagicMock(content=None)
+
+        agent.query = mock_query_gen
+
+        await agent._run_query("test prompt", ["Read"])
+
+        assert call_count == 1
+
+
+# =============================================================================
+# AgentWrapper Error Classification Tests
+# =============================================================================
+
+
+class TestAgentWrapperErrorClassification:
+    """Tests for error classification in AgentWrapper."""
+
+    @pytest.fixture
+    def agent(self, temp_dir):
+        """Create an AgentWrapper instance for testing."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                working_dir=str(temp_dir),
+            )
+        return agent
+
+    def test_classify_rate_limit_error(self, agent):
+        """Test classification of rate limit errors."""
+        error = Exception("API rate limit exceeded")
+        classified = agent._classify_api_error(error)
+        assert isinstance(classified, APIRateLimitError)
+
+    def test_classify_auth_error_401(self, agent):
+        """Test classification of 401 auth error."""
+        error = Exception("HTTP 401 Unauthorized")
+        classified = agent._classify_api_error(error)
+        assert isinstance(classified, APIAuthenticationError)
+
+    def test_classify_auth_error_403(self, agent):
+        """Test classification of 403 auth error."""
+        error = Exception("HTTP 403 Forbidden")
+        classified = agent._classify_api_error(error)
+        assert isinstance(classified, APIAuthenticationError)
+
+    def test_classify_timeout_error(self, agent):
+        """Test classification of timeout errors."""
+        error = Exception("Request timeout after 30 seconds")
+        classified = agent._classify_api_error(error)
+        assert isinstance(classified, APITimeoutError)
+
+    def test_classify_connection_error(self, agent):
+        """Test classification of connection errors."""
+        error = Exception("Connection refused")
+        classified = agent._classify_api_error(error)
+        assert isinstance(classified, APIConnectionError)
+
+    def test_classify_network_error(self, agent):
+        """Test classification of network errors."""
+        error = Exception("Network unreachable")
+        classified = agent._classify_api_error(error)
+        assert isinstance(classified, APIConnectionError)
+
+    def test_classify_server_error_500(self, agent):
+        """Test classification of 500 server errors."""
+        error = Exception("HTTP 500 Internal Server Error")
+        classified = agent._classify_api_error(error)
+        assert isinstance(classified, APIServerError)
+        assert classified.status_code == 500
+
+    def test_classify_server_error_502(self, agent):
+        """Test classification of 502 server errors."""
+        error = Exception("HTTP 502 Bad Gateway")
+        classified = agent._classify_api_error(error)
+        assert isinstance(classified, APIServerError)
+        assert classified.status_code == 502
+
+    def test_classify_server_error_503(self, agent):
+        """Test classification of 503 server errors."""
+        error = Exception("HTTP 503 Service Unavailable")
+        classified = agent._classify_api_error(error)
+        assert isinstance(classified, APIServerError)
+        assert classified.status_code == 503
+
+    def test_classify_unknown_error(self, agent):
+        """Test classification of unknown errors."""
+        error = Exception("Some unknown error")
+        classified = agent._classify_api_error(error)
+        assert isinstance(classified, QueryExecutionError)
+        assert classified.original_error == error
+
+
+# =============================================================================
+# AgentWrapper Working Directory Error Tests
+# =============================================================================
+
+
+class TestAgentWrapperWorkingDirectoryErrors:
+    """Tests for working directory error handling."""
+
+    @pytest.fixture
+    def agent(self, temp_dir):
+        """Create an AgentWrapper instance for testing."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                working_dir="/nonexistent/directory",
+            )
+        return agent
+
+    @pytest.mark.asyncio
+    async def test_working_directory_not_found(self, agent):
+        """Test error when working directory doesn't exist."""
+        with pytest.raises(WorkingDirectoryError) as exc_info:
+            await agent._execute_query("test prompt", ["Read"])
+
+        assert exc_info.value.path == "/nonexistent/directory"
+        assert "change to" in exc_info.value.operation
+
+    @pytest.mark.asyncio
+    async def test_working_directory_permission_error(self, temp_dir):
+        """Test error when working directory has permission issues."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                working_dir=str(temp_dir),
+            )
+
+        # Mock os.chdir to raise PermissionError
+        with patch("os.chdir", side_effect=PermissionError("Permission denied")):
+            with pytest.raises(WorkingDirectoryError) as exc_info:
+                await agent._execute_query("test prompt", ["Read"])
+
+            assert "access" in exc_info.value.operation
+
+
+# =============================================================================
+# AgentWrapper SDK Import Tests
+# =============================================================================
+
+
+class TestAgentWrapperSDKImport:
+    """Tests for SDK import error handling."""
+
+    def test_missing_query_attribute(self):
+        """Test error when SDK is missing query attribute."""
+        mock_sdk = MagicMock(spec=[])  # Empty spec means no attributes
+        del mock_sdk.query
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            with pytest.raises(SDKInitializationError) as exc_info:
+                AgentWrapper(
+                    access_token="test-token",
+                    model=ModelType.SONNET,
+                )
+
+        assert exc_info.value.component == "query"
+
+    def test_missing_options_class(self):
+        """Test error when SDK is missing ClaudeAgentOptions."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        del mock_sdk.ClaudeAgentOptions
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            with pytest.raises(SDKInitializationError) as exc_info:
+                AgentWrapper(
+                    access_token="test-token",
+                    model=ModelType.SONNET,
+                )
+
+        assert exc_info.value.component == "ClaudeAgentOptions"
+
+    def test_query_not_callable(self):
+        """Test error when query is not callable."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = "not a function"
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            with pytest.raises(SDKInitializationError) as exc_info:
+                AgentWrapper(
+                    access_token="test-token",
+                    model=ModelType.SONNET,
+                )
+
+        assert exc_info.value.component == "query"
+
+
+# =============================================================================
+# AgentWrapper Custom Configuration Tests
+# =============================================================================
+
+
+class TestAgentWrapperCustomConfiguration:
+    """Tests for custom retry and backoff configuration."""
+
+    def test_custom_max_retries(self):
+        """Test initialization with custom max_retries."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                max_retries=5,
+            )
+
+        assert agent.max_retries == 5
+
+    def test_custom_initial_backoff(self):
+        """Test initialization with custom initial_backoff."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                initial_backoff=2.0,
+            )
+
+        assert agent.initial_backoff == 2.0
+
+    def test_custom_max_backoff(self):
+        """Test initialization with custom max_backoff."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                max_backoff=60.0,
+            )
+
+        assert agent.max_backoff == 60.0
+
+    def test_default_retry_configuration(self):
+        """Test default retry configuration values."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+            )
+
+        assert agent.max_retries == AgentWrapper.DEFAULT_MAX_RETRIES
+        assert agent.initial_backoff == AgentWrapper.DEFAULT_INITIAL_BACKOFF
+        assert agent.max_backoff == AgentWrapper.DEFAULT_MAX_BACKOFF
+
+
+# =============================================================================
+# AgentWrapper Process Message Tests
+# =============================================================================
+
+
+class TestAgentWrapperProcessMessage:
+    """Tests for _process_message method."""
+
+    @pytest.fixture
+    def agent(self, temp_dir):
+        """Create an AgentWrapper instance for testing."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            return AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                working_dir=str(temp_dir),
+            )
+
+    def test_process_message_text_block(self, agent, capsys):
+        """Test processing TextBlock messages."""
+        text_block = MagicMock()
+        type(text_block).__name__ = "TextBlock"
+        text_block.text = "Hello, world!"
+
+        mock_message = MagicMock()
+        mock_message.content = [text_block]
+
+        result = agent._process_message(mock_message, "")
+
+        assert result == "Hello, world!"
+        captured = capsys.readouterr()
+        assert "Hello, world!" in captured.out
+
+    def test_process_message_accumulates_text(self, agent):
+        """Test that text is accumulated from multiple blocks."""
+        text_block1 = MagicMock()
+        type(text_block1).__name__ = "TextBlock"
+        text_block1.text = "First "
+
+        text_block2 = MagicMock()
+        type(text_block2).__name__ = "TextBlock"
+        text_block2.text = "Second"
+
+        mock_message = MagicMock()
+        mock_message.content = [text_block1, text_block2]
+
+        result = agent._process_message(mock_message, "Initial ")
+
+        assert result == "Initial First Second"
+
+    def test_process_message_result_message(self, agent):
+        """Test processing ResultMessage overwrites accumulated text."""
+        result_message = MagicMock()
+        type(result_message).__name__ = "ResultMessage"
+        result_message.result = "Final result"
+        result_message.content = None
+
+        result = agent._process_message(result_message, "Previous text")
+
+        assert result == "Final result"
+
+    def test_process_message_without_content(self, agent):
+        """Test processing message without content."""
+        mock_message = MagicMock()
+        mock_message.content = None
+
+        result = agent._process_message(mock_message, "Unchanged")
+
+        assert result == "Unchanged"
