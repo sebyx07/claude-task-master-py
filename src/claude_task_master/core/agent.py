@@ -514,6 +514,7 @@ Format your response clearly."""
                     allowed_tools=tools,
                     permission_mode="bypassPermissions",  # For MVP, bypass permissions
                     model=model_name,  # Specify the model to use
+                    setting_sources=["project"],  # Load CLAUDE.md from project directory
                 )
             except Exception as e:
                 raise SDKInitializationError("ClaudeAgentOptions", e) from e
