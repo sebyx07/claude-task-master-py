@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 
 from .core.credentials import CredentialManager
-from .core.state import StateManager, TaskOptions
+from .core.state import StateManager, TaskOptions, StateResumeValidationError
 from .core.agent import AgentWrapper, ModelType
 from .core.planner import Planner
 from .core.orchestrator import WorkLoopOrchestrator
@@ -134,26 +134,27 @@ def resume() -> None:
             console.print("Use 'start' to begin a new task.")
             raise typer.Exit(1)
 
-        # Load state and verify it's resumable
-        state = state_manager.load_state()
-
-        # Check if task is in a terminal state
-        if state.status == "success":
-            console.print("[green]Task has already completed successfully.[/green]")
-            console.print("Use 'clean' to remove state and start a new task.")
-            raise typer.Exit(0)
-
-        if state.status == "failed":
-            console.print("[red]Task has failed and cannot be resumed.[/red]")
-            console.print("Use 'clean' to remove state and start a new task.")
-            raise typer.Exit(1)
-
-        # Verify we have a plan to resume
-        plan = state_manager.load_plan()
-        if not plan:
-            console.print("[red]Error: No plan found. Task state may be corrupted.[/red]")
-            console.print("Use 'clean' to remove state and start fresh.")
-            raise typer.Exit(1)
+        # Load state and validate it's resumable using comprehensive validation
+        try:
+            state = state_manager.validate_for_resume()
+        except StateResumeValidationError as e:
+            # Handle terminal states with appropriate exit codes
+            if e.status == "success":
+                console.print(f"[green]{e.message}[/green]")
+                if e.suggestion:
+                    console.print(f"[dim]{e.suggestion}[/dim]")
+                raise typer.Exit(0)
+            elif e.status == "failed":
+                console.print(f"[red]{e.message}[/red]")
+                if e.suggestion:
+                    console.print(f"[dim]{e.suggestion}[/dim]")
+                raise typer.Exit(1)
+            else:
+                # Other validation errors
+                console.print(f"[red]Error: {e.message}[/red]")
+                if e.details:
+                    console.print(f"[dim]{e.details}[/dim]")
+                raise typer.Exit(1)
 
         # Display current status
         goal = state_manager.load_goal()

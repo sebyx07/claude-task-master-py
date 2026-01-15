@@ -106,12 +106,51 @@ class StateLockError(StateError):
         )
 
 
+class StateResumeValidationError(StateError):
+    """Raised when state is not valid for resumption."""
+
+    def __init__(
+        self,
+        reason: str,
+        status: Optional[str] = None,
+        current_task_index: Optional[int] = None,
+        total_tasks: Optional[int] = None,
+        suggestion: Optional[str] = None,
+    ):
+        self.reason = reason
+        self.status = status
+        self.current_task_index = current_task_index
+        self.total_tasks = total_tasks
+        self.suggestion = suggestion
+
+        details_parts = []
+        if status:
+            details_parts.append(f"Current status: {status}")
+        if current_task_index is not None:
+            details_parts.append(f"Task index: {current_task_index}")
+        if total_tasks is not None:
+            details_parts.append(f"Total tasks: {total_tasks}")
+        if suggestion:
+            details_parts.append(f"Suggestion: {suggestion}")
+
+        super().__init__(
+            f"Cannot resume task: {reason}",
+            " | ".join(details_parts) if details_parts else None,
+        )
+
+
 # =============================================================================
 # Valid State Transitions
 # =============================================================================
 
 # Define valid status values
 VALID_STATUSES = frozenset(["planning", "working", "blocked", "paused", "success", "failed"])
+
+# Define terminal statuses (cannot be resumed)
+TERMINAL_STATUSES = frozenset(["success", "failed"])
+
+# Define resumable statuses (can resume execution)
+RESUMABLE_STATUSES = frozenset(["paused", "working", "blocked"])
 
 # Define valid state transitions
 VALID_TRANSITIONS: dict[str, frozenset[str]] = {
@@ -548,6 +587,122 @@ class StateManager:
     def exists(self) -> bool:
         """Check if state directory exists."""
         return self.state_dir.exists() and (self.state_dir / "state.json").exists()
+
+    def validate_for_resume(self, state: Optional[TaskState] = None) -> TaskState:
+        """Validate that state is valid for resumption.
+
+        This method performs comprehensive validation to ensure a task
+        can be safely resumed, including:
+        - State file exists and is valid
+        - Status is resumable (not terminal)
+        - Plan file exists
+        - Current task index is within bounds
+
+        Args:
+            state: Optional TaskState to validate. If not provided, loads from disk.
+
+        Returns:
+            TaskState: The validated state object ready for resumption.
+
+        Raises:
+            StateNotFoundError: If no state file exists.
+            StateResumeValidationError: If state is not valid for resumption.
+            StateCorruptedError: If state file is corrupted.
+            StateValidationError: If state data fails validation.
+        """
+        # Load state if not provided
+        if state is None:
+            if not self.exists():
+                raise StateNotFoundError(self.state_file)
+            state = self.load_state()
+
+        # Check for terminal states
+        if state.status in TERMINAL_STATUSES:
+            suggestion = "Use 'clean' to remove state and start a new task."
+            if state.status == "success":
+                raise StateResumeValidationError(
+                    "Task has already completed successfully",
+                    status=state.status,
+                    suggestion=suggestion,
+                )
+            else:  # failed
+                raise StateResumeValidationError(
+                    "Task has failed and cannot be resumed",
+                    status=state.status,
+                    suggestion=suggestion,
+                )
+
+        # Check for planning state - needs special handling
+        if state.status == "planning":
+            # Planning state can be resumed but needs a plan
+            plan = self.load_plan()
+            if not plan:
+                raise StateResumeValidationError(
+                    "Task is in planning phase but no plan exists",
+                    status=state.status,
+                    suggestion="Planning was interrupted. Consider using 'clean' and starting fresh.",
+                )
+
+        # Verify state is resumable
+        if state.status not in RESUMABLE_STATUSES and state.status != "planning":
+            raise StateResumeValidationError(
+                f"Status '{state.status}' is not resumable",
+                status=state.status,
+                suggestion=f"Valid resumable statuses: {', '.join(sorted(RESUMABLE_STATUSES))}",
+            )
+
+        # Verify plan exists for non-planning states
+        plan = self.load_plan()
+        if not plan:
+            raise StateResumeValidationError(
+                "No plan file found",
+                status=state.status,
+                suggestion="Task state may be corrupted. Use 'clean' to start fresh.",
+            )
+
+        # Parse tasks and validate current_task_index
+        tasks = self._parse_plan_tasks(plan)
+
+        # Validate current_task_index is within bounds
+        if state.current_task_index < 0:
+            raise StateResumeValidationError(
+                "Invalid task index (negative)",
+                status=state.status,
+                current_task_index=state.current_task_index,
+                total_tasks=len(tasks),
+                suggestion="Task state may be corrupted. Use 'clean' to start fresh.",
+            )
+
+        # Allow index == len(tasks) since it means all tasks are complete
+        if tasks and state.current_task_index > len(tasks):
+            raise StateResumeValidationError(
+                "Task index exceeds number of tasks in plan",
+                status=state.status,
+                current_task_index=state.current_task_index,
+                total_tasks=len(tasks),
+                suggestion="Task state may be out of sync with plan. Use 'clean' to start fresh.",
+            )
+
+        return state
+
+    def _parse_plan_tasks(self, plan: str) -> list[str]:
+        """Parse tasks from plan markdown.
+
+        Args:
+            plan: The plan content in markdown format.
+
+        Returns:
+            List of task descriptions extracted from the plan.
+        """
+        tasks = []
+        for line in plan.split("\n"):
+            # Look for markdown checkbox lines
+            stripped = line.strip()
+            if stripped.startswith("- [ ]") or stripped.startswith("- [x]"):
+                task = stripped[5:].strip()  # Remove "- [ ]" or "- [x]"
+                if task:
+                    tasks.append(task)
+        return tasks
 
     def cleanup_on_success(self, run_id: str) -> None:
         """Clean up all state files except logs on success."""
