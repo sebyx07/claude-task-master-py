@@ -2,6 +2,8 @@
 
 from typing import Any, Optional
 from enum import Enum
+import asyncio
+import os
 
 
 class ModelType(Enum):
@@ -22,21 +24,44 @@ class ToolConfig(Enum):
 class AgentWrapper:
     """Wraps Claude Agent SDK for task execution."""
 
-    def __init__(self, access_token: str, model: ModelType):
+    def __init__(self, access_token: str, model: ModelType, working_dir: str = "."):
         """Initialize agent wrapper."""
         self.access_token = access_token
         self.model = model
-        # TODO: Initialize Claude Agent SDK
+        self.working_dir = working_dir
+
+        # Import Claude Agent SDK
+        try:
+            from claude_agent_sdk import query, ClaudeAgentOptions
+            self.query = query
+            self.options_class = ClaudeAgentOptions
+        except ImportError:
+            raise RuntimeError(
+                "claude-agent-sdk not installed. Install with: pip install claude-agent-sdk"
+            )
+
+        # Set API key environment variable
+        os.environ["ANTHROPIC_API_KEY"] = access_token
 
     def run_planning_phase(
         self, goal: str, context: str = ""
     ) -> dict[str, Any]:
         """Run planning phase with read-only tools."""
-        # TODO: Implement planning phase
-        # - Use only read-only tools (Read, Glob, Grep)
-        # - Ask Claude to analyze the goal and create a task list
-        # - Return plan with tasks and success criteria
-        raise NotImplementedError
+        # Build prompt for planning
+        prompt = self._build_planning_prompt(goal, context)
+
+        # Run async query
+        result = asyncio.run(self._run_query(
+            prompt=prompt,
+            tools=self.get_tools_for_phase("planning"),
+        ))
+
+        # Parse result to extract plan and criteria
+        return {
+            "plan": self._extract_plan(result),
+            "criteria": self._extract_criteria(result),
+            "raw_output": result,
+        }
 
     def run_work_session(
         self,
@@ -45,20 +70,69 @@ class AgentWrapper:
         pr_comments: Optional[str] = None,
     ) -> dict[str, Any]:
         """Run a work session with full tools."""
-        # TODO: Implement work session
-        # - Use all working tools (Read, Write, Edit, Bash, Glob, Grep)
-        # - Include PR comments in context if provided
-        # - Return session results
-        raise NotImplementedError
+        # Build prompt for work session
+        prompt = self._build_work_prompt(task_description, context, pr_comments)
+
+        # Run async query
+        result = asyncio.run(self._run_query(
+            prompt=prompt,
+            tools=self.get_tools_for_phase("working"),
+        ))
+
+        return {
+            "output": result,
+            "success": True,  # For MVP, assume success
+        }
 
     def verify_success_criteria(
         self, criteria: str, context: str = ""
     ) -> dict[str, Any]:
         """Verify if success criteria are met."""
-        # TODO: Implement success verification
-        # - Use read-only tools to check criteria
-        # - Return verification result
-        raise NotImplementedError
+        prompt = f"""Review the following success criteria and verify if they have been met:
+
+{criteria}
+
+{context}
+
+Respond with:
+1. Whether each criterion is met (yes/no)
+2. Overall success (all criteria met)
+3. Any issues or gaps
+
+Format your response clearly."""
+
+        # Run async query
+        result = asyncio.run(self._run_query(
+            prompt=prompt,
+            tools=self.get_tools_for_phase("planning"),
+        ))
+
+        # For MVP, simple check for success indicators
+        success = "all criteria met" in result.lower() or "success" in result.lower()
+
+        return {
+            "success": success,
+            "details": result,
+        }
+
+    async def _run_query(self, prompt: str, tools: list[str]) -> str:
+        """Run query and collect result."""
+        result_text = ""
+
+        options = self.options_class(
+            allowed_tools=tools,
+            permission_mode="bypassPermissions",  # For MVP, bypass permissions
+            working_directory=self.working_dir,
+        )
+
+        async for message in self.query(prompt=prompt, options=options):
+            # Collect messages and look for result
+            if hasattr(message, "result"):
+                result_text = message.result
+            elif hasattr(message, "content"):
+                result_text += str(message.content)
+
+        return result_text
 
     def get_tools_for_phase(self, phase: str) -> list[str]:
         """Get appropriate tools for the given phase."""
@@ -66,3 +140,86 @@ class AgentWrapper:
             return ToolConfig.PLANNING.value
         else:
             return ToolConfig.WORKING.value
+
+    def _get_model_name(self) -> str:
+        """Convert ModelType to API model name."""
+        model_map = {
+            ModelType.SONNET: "claude-sonnet-4-20250514",
+            ModelType.OPUS: "claude-opus-4-20250514",
+            ModelType.HAIKU: "claude-3-5-haiku-20241022",
+        }
+        return model_map.get(self.model, "claude-sonnet-4-20250514")
+
+    def _build_planning_prompt(self, goal: str, context: str) -> str:
+        """Build prompt for planning phase."""
+        prompt = f"""You are Claude Task Master, an autonomous task orchestration system.
+
+GOAL: {goal}
+
+Your task is to:
+1. Analyze the goal and understand what needs to be done
+2. Explore the codebase if relevant (use Read, Glob, Grep tools)
+3. Create a detailed task list with markdown checkboxes
+4. Define clear success criteria
+
+{context}
+
+Please create a plan with:
+- A task list using markdown checkboxes (- [ ] Task description)
+- Clear, actionable tasks
+- Success criteria at the end
+
+Format:
+## Task List
+- [ ] Task 1
+- [ ] Task 2
+...
+
+## Success Criteria
+1. Criterion 1
+2. Criterion 2
+..."""
+        return prompt
+
+    def _build_work_prompt(
+        self, task_description: str, context: str, pr_comments: Optional[str]
+    ) -> str:
+        """Build prompt for work session."""
+        prompt = f"""You are Claude Task Master working on a specific task.
+
+CURRENT TASK: {task_description}
+
+{context}"""
+
+        if pr_comments:
+            prompt += f"""
+
+PR REVIEW COMMENTS TO ADDRESS:
+{pr_comments}"""
+
+        prompt += """
+
+Please complete this task using the available tools (Read, Write, Edit, Bash, Glob, Grep).
+Work autonomously and report when done."""
+
+        return prompt
+
+    def _extract_plan(self, result: str) -> str:
+        """Extract task list from planning result."""
+        # For MVP, return the full result - we'll parse later
+        if "## Task List" in result:
+            return result
+
+        # If no proper format, wrap it
+        return f"## Task List\n\n{result}"
+
+    def _extract_criteria(self, result: str) -> str:
+        """Extract success criteria from planning result."""
+        # Look for success criteria section
+        if "## Success Criteria" in result:
+            parts = result.split("## Success Criteria")
+            if len(parts) > 1:
+                return parts[1].strip()
+
+        # Default criteria if none specified
+        return "All tasks in the task list are completed successfully."
