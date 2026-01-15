@@ -798,12 +798,14 @@ class StateManager:
 
             # Create filename from sanitized path
             safe_path = path.replace("/", "_").replace("\\", "_") if path else "general"
-            filename = f"{i:03d}_{safe_path}_L{line}.txt"
+            # Sanitize line number (could be "N/A" or None)
+            safe_line = str(line).replace("/", "_").replace("\\", "_") if line else "0"
+            filename = f"{i:03d}_{safe_path}_L{safe_line}.txt"
 
             content = f"""File: {path}
 Line: {line}
 Author: {author}
-Status: {'Resolved' if is_resolved else 'Unresolved'}
+Status: {"Resolved" if is_resolved else "Unresolved"}
 
 {body}
 """
@@ -842,9 +844,9 @@ Status: {'Resolved' if is_resolved else 'Unresolved'}
         content = f"""CI Check Failed: {check_name}
 PR: #{pr_number}
 
-{'=' * 60}
+{"=" * 60}
 FAILURE LOGS:
-{'=' * 60}
+{"=" * 60}
 
 {logs}
 """
