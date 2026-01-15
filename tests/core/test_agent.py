@@ -443,7 +443,7 @@ class TestAgentWrapperGetModelName:
                 access_token="test-token",
                 model=ModelType.SONNET,
             )
-        assert agent._get_model_name() == "claude-sonnet-4-20250514"
+        assert agent._get_model_name() == "claude-sonnet-4-5-20241022"
 
     def test_opus_model_name(self, mock_sdk):
         """Test OPUS model name mapping."""
@@ -452,7 +452,7 @@ class TestAgentWrapperGetModelName:
                 access_token="test-token",
                 model=ModelType.OPUS,
             )
-        assert agent._get_model_name() == "claude-opus-4-20250514"
+        assert agent._get_model_name() == "claude-opus-4-5-20250514"
 
     def test_haiku_model_name(self, mock_sdk):
         """Test HAIKU model name mapping."""
@@ -461,7 +461,7 @@ class TestAgentWrapperGetModelName:
                 access_token="test-token",
                 model=ModelType.HAIKU,
             )
-        assert agent._get_model_name() == "claude-3-5-haiku-20241022"
+        assert agent._get_model_name() == "claude-haiku-4-5-20241022"
 
 
 # =============================================================================
