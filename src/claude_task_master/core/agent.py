@@ -559,9 +559,10 @@ Format your response clearly."""
                     console.stream(block.text)
                     result_text += block.text
                 elif block_type == "ToolUseBlock":
-                    # Tool being invoked
+                    # Tool being invoked - show details
                     console.newline()
-                    console.tool(f"Using tool: {block.name}", flush=True)
+                    tool_detail = self._format_tool_detail(block.name, getattr(block, "input", {}))
+                    console.tool(f"Using tool: {block.name} {tool_detail}", flush=True)
                 elif block_type == "ToolResultBlock":
                     # Tool result - show completion
                     if block.is_error:
@@ -576,6 +577,46 @@ Format your response clearly."""
                 console.newline()  # Add newline after completion
 
         return result_text
+
+    def _format_tool_detail(self, tool_name: str, tool_input: dict[str, Any]) -> str:
+        """Format tool input for display.
+
+        Shows the most relevant parameter for each tool type.
+        """
+        if not tool_input:
+            return ""
+
+        # Map tool names to their most relevant parameters
+        if tool_name == "Bash":
+            cmd = tool_input.get("command", "")
+            # Truncate long commands
+            if len(cmd) > 80:
+                cmd = cmd[:77] + "..."
+            return f"→ {cmd}"
+        elif tool_name == "Read":
+            path = tool_input.get("file_path", "")
+            return f"→ {path}"
+        elif tool_name == "Write":
+            path = tool_input.get("file_path", "")
+            return f"→ {path}"
+        elif tool_name == "Edit":
+            path = tool_input.get("file_path", "")
+            return f"→ {path}"
+        elif tool_name == "Glob":
+            pattern = tool_input.get("pattern", "")
+            path = tool_input.get("path", ".")
+            return f"→ {pattern} in {path}"
+        elif tool_name == "Grep":
+            pattern = tool_input.get("pattern", "")
+            path = tool_input.get("path", ".")
+            return f"→ '{pattern}' in {path}"
+        else:
+            # For unknown tools, show first key-value if available
+            if tool_input:
+                first_key = next(iter(tool_input))
+                first_val = str(tool_input[first_key])[:50]
+                return f"→ {first_key}={first_val}"
+            return ""
 
     def _classify_api_error(self, error: Exception) -> AgentError:
         """Classify an API error into a specific error type.
