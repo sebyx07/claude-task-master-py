@@ -48,6 +48,9 @@ dmypy.json
 # Claude Task Master state
 .claude-task-master/
 
+# Test directory
+tmp/
+
 # OS
 .DS_Store
 Thumbs.db

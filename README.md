@@ -16,8 +16,22 @@ Claude Task Master uses the Claude Agent SDK to autonomously work on complex tas
 
 ## Installation
 
+### With uv (recommended)
+
+```bash
+uv sync
+```
+
+### With pip
+
 ```bash
 pip install -e .
+```
+
+Or install from requirements.txt:
+
+```bash
+pip install -r requirements.txt
 ```
 
 ## Prerequisites
@@ -29,6 +43,10 @@ pip install -e .
 Run system checks:
 
 ```bash
+# With uv
+uv run python -m claude_task_master.cli doctor
+
+# Or if installed
 claude-task-master doctor
 ```
 
@@ -37,6 +55,10 @@ claude-task-master doctor
 ### Start a new task
 
 ```bash
+# With uv
+uv run python -m claude_task_master.cli start "Your goal here"
+
+# Or if installed
 claude-task-master start "Your goal here"
 ```
 

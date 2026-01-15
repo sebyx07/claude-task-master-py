@@ -93,3 +93,8 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --cov=claude_task_master --cov-report=term-missing"
+
+[tool.uv.workspace]
+members = [
+    "tmp/test-project-1",
+]
