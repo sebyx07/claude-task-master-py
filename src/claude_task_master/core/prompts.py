@@ -285,7 +285,9 @@ def build_work_prompt(
 
 {task_description}{branch_info}
 
-**Focus on THIS task only. Do not work ahead to other tasks.**"""
+**Focus on THIS task only. Do not work ahead to other tasks.**
+
+📋 **Full plan available at:** `.claude-task-master/plan.md`"""
     )
 
     # Context section
