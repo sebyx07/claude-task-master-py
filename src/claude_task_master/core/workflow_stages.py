@@ -146,8 +146,8 @@ class WorkflowStageHandler:
                     f"{pr_status.checks_passed} passed, {pr_status.checks_pending} pending"
                 )
                 for check in pr_status.check_details:
-                    conclusion = (check.get("conclusion") or "").lower()
-                    if conclusion in ("failure", "error"):
+                    conclusion = (check.get("conclusion") or "").upper()
+                    if conclusion in ("FAILURE", "ERROR"):
                         check_name = self._get_check_name(check)
                         console.detail(f"  ✗ {check_name}: {conclusion}")
                 state.workflow_stage = "ci_failed"
@@ -160,11 +160,11 @@ class WorkflowStageHandler:
                 )
                 # Show individual check statuses if available
                 for check in pr_status.check_details:
-                    status = check.get("status", "unknown")
+                    status = (check.get("status") or "").upper()
                     check_name = self._get_check_name(check)
-                    if status.lower() in ("in_progress", "pending"):
+                    if status in ("IN_PROGRESS", "PENDING"):
                         console.detail(f"  ⏳ {check_name}: running")
-                    elif status.lower() == "queued":
+                    elif status == "QUEUED":
                         console.detail(f"  ⏸ {check_name}: queued")
                 console.detail(f"Next check in {self.CI_POLL_INTERVAL}s...")
                 if not interruptible_sleep(self.CI_POLL_INTERVAL):

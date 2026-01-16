@@ -192,19 +192,19 @@ class GitHubClient:
         unresolved = sum(1 for thread in threads if not thread["isResolved"])
         resolved = total_threads - unresolved
 
-        # Count check statuses
+        # Count check statuses (GitHub API returns uppercase values)
         checks_passed = sum(
             1
             for c in check_details
-            if (c.get("conclusion") or "").lower() in ("success", "neutral")
+            if (c.get("conclusion") or "").upper() in ("SUCCESS", "NEUTRAL")
         )
         checks_failed = sum(
             1
             for c in check_details
-            if (c.get("conclusion") or "").lower() in ("failure", "error", "cancelled", "timed_out")
+            if (c.get("conclusion") or "").upper() in ("FAILURE", "ERROR", "CANCELLED", "TIMED_OUT")
         )
         checks_skipped = sum(
-            1 for c in check_details if (c.get("conclusion") or "").lower() == "skipped"
+            1 for c in check_details if (c.get("conclusion") or "").upper() == "SKIPPED"
         )
         checks_pending = len(check_details) - checks_passed - checks_failed - checks_skipped
 

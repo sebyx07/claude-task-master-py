@@ -57,8 +57,8 @@ class PRContextManager:
         try:
             pr_status = self.github_client.get_pr_status(pr_number)
             for check in pr_status.check_details:
-                conclusion = (check.get("conclusion") or "").lower()
-                if conclusion in ("failure", "error"):
+                conclusion = (check.get("conclusion") or "").upper()
+                if conclusion in ("FAILURE", "ERROR"):
                     self.state_manager.save_ci_failure(
                         pr_number,
                         check.get("name", "unknown"),
