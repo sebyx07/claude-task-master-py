@@ -117,9 +117,10 @@ class WorkflowStageHandler:
                     f"{pr_status.checks_passed} passed, {pr_status.checks_pending} pending"
                 )
                 for check in pr_status.check_details:
-                    if check.get("conclusion") in ("failure", "error"):
+                    conclusion = (check.get("conclusion") or "").lower()
+                    if conclusion in ("failure", "error"):
                         check_name = self._get_check_name(check)
-                        console.detail(f"  ✗ {check_name}: {check.get('conclusion')}")
+                        console.detail(f"  ✗ {check_name}: {conclusion}")
                 state.workflow_stage = "ci_failed"
                 self.state_manager.save_state(state)
                 return None
