@@ -198,6 +198,13 @@ class ToolConfig(Enum):
         "Glob",
         "Grep",
     ]
+    # Verification uses read tools + Bash for running tests/lint (no write access)
+    VERIFICATION = [
+        "Read",
+        "Glob",
+        "Grep",
+        "Bash",
+    ]
     # Working phase has full tool access for implementation
     WORKING = [
         "Read",
@@ -463,11 +470,11 @@ Then provide:
 
 Be strict - only say PASS if ALL criteria are truly met."""
 
-        # Run async query
+        # Run async query with verification tools (read + bash for running tests)
         result = asyncio.run(
             self._run_query(
                 prompt=prompt,
-                tools=self.get_tools_for_phase("planning"),
+                tools=self.get_tools_for_phase("verification"),
             )
         )
 
@@ -848,6 +855,8 @@ Be strict - only say PASS if ALL criteria are truly met."""
         """Get appropriate tools for the given phase."""
         if phase == "planning":
             return ToolConfig.PLANNING.value
+        elif phase == "verification":
+            return ToolConfig.VERIFICATION.value
         else:
             return ToolConfig.WORKING.value
 

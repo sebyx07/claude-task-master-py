@@ -324,12 +324,32 @@ class TestToolConfig:
         ]
         assert ToolConfig.WORKING.value == expected
 
+    def test_verification_tools(self):
+        """Test VERIFICATION tool configuration - read tools + Bash for running tests."""
+        expected = [
+            "Read",
+            "Glob",
+            "Grep",
+            "Bash",
+        ]
+        assert ToolConfig.VERIFICATION.value == expected
+
     def test_planning_has_subset_of_working_tools(self):
         """Test planning tools are a subset of working tools (read-only)."""
         planning_tools = set(ToolConfig.PLANNING.value)
         working_tools = set(ToolConfig.WORKING.value)
         assert planning_tools.issubset(working_tools)
         assert planning_tools != working_tools  # Planning is restricted
+
+    def test_verification_has_subset_of_working_tools(self):
+        """Test verification tools are a subset of working tools."""
+        verification_tools = set(ToolConfig.VERIFICATION.value)
+        working_tools = set(ToolConfig.WORKING.value)
+        assert verification_tools.issubset(working_tools)
+        # Verification has Bash but no Write/Edit
+        assert "Bash" in verification_tools
+        assert "Write" not in verification_tools
+        assert "Edit" not in verification_tools
 
 
 # =============================================================================
@@ -445,6 +465,17 @@ class TestAgentWrapperGetToolsForPhase:
             "Read",
             "Glob",
             "Grep",
+        ]
+        assert tools == expected
+
+    def test_verification_phase_tools(self, agent):
+        """Test get_tools_for_phase returns verification tools (read + Bash)."""
+        tools = agent.get_tools_for_phase("verification")
+        expected = [
+            "Read",
+            "Glob",
+            "Grep",
+            "Bash",
         ]
         assert tools == expected
 
