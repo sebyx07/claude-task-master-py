@@ -678,21 +678,21 @@ class WorkLoopOrchestrator:
                 pass  # Best effort
 
         # Build fix prompt - point Claude to the saved context files
-        pr_context_hint = ""
-        if state.current_pr is not None:
-            pr_dir = self.state_manager.get_pr_dir(state.current_pr)
-            pr_context_hint = f"\nCI failure logs saved to: {pr_dir}/ci/"
+        pr_dir = self.state_manager.get_pr_dir(state.current_pr) if state.current_pr else None
+        ci_path = f"{pr_dir}/ci/" if pr_dir else ".claude-task-master/debugging/"
 
         task_description = f"""CI has failed for PR #{state.current_pr}.
-{pr_context_hint}
-Failed CI logs:
-{failed_logs}
+
+**Read the CI failure logs from:** `{ci_path}`
+
+Use Glob to find all .txt files, then Read each one to understand the errors.
 
 Please:
-1. Read the error messages carefully
-2. Make the necessary fixes
-3. Run tests locally to verify
-4. Commit and push the fixes
+1. Read ALL files in the ci/ directory
+2. Understand the error messages
+3. Make the necessary fixes
+4. Run tests locally to verify
+5. Commit and push the fixes
 
 After fixing, end with: TASK COMPLETE"""
 
@@ -749,37 +749,28 @@ After fixing, end with: TASK COMPLETE"""
         """Handle addressing reviews - run agent to fix review comments."""
         console.info("Addressing review comments...")
 
-        # Get PR comments
-        comments_text = ""
+        # Save comments to files for Claude to read
         try:
             if state.current_pr is not None:
-                comments_text = self.github_client.get_pr_comments(
-                    state.current_pr,
-                    only_unresolved=True,
-                )
-
-                # Also save comments to files for Claude to read
-                # Parse the GraphQL response to get structured comments
                 self._save_pr_comments_to_files(state.current_pr)
-            else:
-                comments_text = "No PR number available"
         except Exception:
-            comments_text = "Could not retrieve review comments"
+            pass  # Best effort
 
         # Build fix prompt - point Claude to the saved context files
-        pr_context_hint = ""
-        if state.current_pr is not None:
-            pr_dir = self.state_manager.get_pr_dir(state.current_pr)
-            pr_context_hint = f"\nReview comments saved to: {pr_dir}/comments/"
+        pr_dir = self.state_manager.get_pr_dir(state.current_pr) if state.current_pr else None
+        comments_path = f"{pr_dir}/comments/" if pr_dir else ".claude-task-master/debugging/"
 
         task_description = f"""PR #{state.current_pr} has review comments to address.
-{pr_context_hint}
-Review comments:
-{comments_text}
+
+**Read the review comments from:** `{comments_path}`
+
+Use Glob to find all .txt files, then Read each one to understand the feedback.
 
 Please:
-1. Read each comment carefully
-2. Make the requested changes (or explain why not needed)
+1. Read ALL comment files in the comments/ directory
+2. For each comment:
+   - Make the requested change, OR
+   - Explain why it's not needed
 3. Run tests to verify
 4. Commit and push the fixes
 
@@ -794,7 +785,6 @@ After addressing ALL comments, end with: TASK COMPLETE"""
         self.agent.run_work_session(
             task_description=task_description,
             context=context,
-            pr_comments=comments_text,
             model_override=ModelType.OPUS,  # Use smartest model for reviews
         )
 

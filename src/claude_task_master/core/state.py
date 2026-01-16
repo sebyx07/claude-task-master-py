@@ -840,8 +840,11 @@ class StateManager:
     # =========================================================================
 
     def get_pr_dir(self, pr_number: int) -> Path:
-        """Get the directory for a specific PR's context."""
-        pr_dir = self.state_dir / "prs" / str(pr_number)
+        """Get the directory for a specific PR's context.
+
+        Structure: .claude-task-master/debugging/pr/{number}/
+        """
+        pr_dir = self.state_dir / "debugging" / "pr" / str(pr_number)
         pr_dir.mkdir(parents=True, exist_ok=True)
         return pr_dir
 
