@@ -345,14 +345,16 @@ EOF
 **5. Push and Create PR** (if task requires it)
 ```bash
 git push -u origin HEAD
-gh pr create --title "type: description" --body "..." --label "claudetm"
+gh pr create --title "type: description" --body "..."
 ```
 
-**NOTE**: After pushing, STOP. The orchestrator will:
-- Wait for CI
-- Feed you CI errors if any
-- Feed you review comments if any
-- Merge when ready""",
+**STOP AFTER PR CREATION - DO NOT:**
+- ❌ Wait for CI (`sleep`, `watch`, polling)
+- ❌ Check CI status (`gh pr checks`, `gh pr view`)
+- ❌ Monitor PR status
+- ❌ Merge the PR
+
+**The orchestrator handles CI/reviews/merge automatically.**""",
     )
 
     # Completion summary
