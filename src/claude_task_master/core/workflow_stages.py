@@ -415,9 +415,9 @@ After addressing ALL comments and creating the resolution file, end with: TASK C
         if plan:
             mark_task_complete_fn(plan, state.current_task_index)
 
-        # Clear PR context files and checkout to base branch
-        base_branch = "main"
+        # Clear PR context files and checkout to base branch (only if PR was merged)
         if state.current_pr is not None:
+            base_branch = "main"
             try:
                 # Get base branch from PR before clearing
                 pr_status = self.github_client.get_pr_status(state.current_pr)
@@ -430,12 +430,12 @@ After addressing ALL comments and creating the resolution file, end with: TASK C
             except Exception:
                 pass  # Best effort cleanup
 
-        # Checkout to base branch to avoid conflicts on next task
-        console.info(f"Checking out to {base_branch}...")
-        if self._checkout_branch(base_branch):
-            console.success(f"Switched to {base_branch}")
-        else:
-            console.warning(f"Could not checkout to {base_branch}, may need manual checkout")
+            # Checkout to base branch to avoid conflicts on next task
+            console.info(f"Checking out to {base_branch}...")
+            if self._checkout_branch(base_branch):
+                console.success(f"Switched to {base_branch}")
+            else:
+                console.warning(f"Could not checkout to {base_branch}, may need manual checkout")
 
         # Move to next task
         state.current_task_index += 1
