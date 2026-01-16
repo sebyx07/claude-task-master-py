@@ -1665,19 +1665,33 @@ test-job\t  at test_file.py:42"""
     def test_get_failed_run_logs_without_run_id(self, github_client):
         """Test getting logs for latest failed run."""
         log_output = "build\tCompilation failed"
+        workflow_runs_response = json.dumps([
+            {
+                "databaseId": 123,
+                "name": "CI",
+                "status": "completed",
+                "conclusion": "failure",
+                "url": "https://example.com",
+                "headBranch": "main",
+                "event": "push",
+            }
+        ])
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0,
-                stdout=log_output,
-                stderr="",
-            )
-            github_client.get_failed_run_logs()
+            # First call returns workflow runs, second returns logs
+            mock_run.side_effect = [
+                MagicMock(returncode=0, stdout=workflow_runs_response, stderr=""),
+                MagicMock(returncode=0, stdout=log_output, stderr=""),
+            ]
+            result = github_client.get_failed_run_logs()
 
-            call_args = mock_run.call_args[0][0]
+            # Check that second call (log fetch) has correct args
+            call_args = mock_run.call_args_list[1][0][0]
             assert "gh" in call_args
             assert "run" in call_args
             assert "view" in call_args
+            assert "123" in call_args  # Run ID
             assert "--log-failed" in call_args
+            assert result == log_output
 
     def test_get_failed_run_logs_truncates_long_output(self, github_client):
         """Test that long logs are truncated."""
@@ -1691,7 +1705,7 @@ test-job\t  at test_file.py:42"""
                 stdout=log_output,
                 stderr="",
             )
-            logs = github_client.get_failed_run_logs(max_lines=100)
+            logs = github_client.get_failed_run_logs(run_id=123, max_lines=100)
 
             # Should be truncated
             assert "more lines" in logs
@@ -1720,7 +1734,7 @@ test-job\t  at test_file.py:42"""
                 stdout=log_output,
                 stderr="",
             )
-            logs = github_client.get_failed_run_logs(max_lines=100)
+            logs = github_client.get_failed_run_logs(run_id=123, max_lines=100)
 
             assert logs == "Line 1\nLine 2\nLine 3"
             assert "more lines" not in logs

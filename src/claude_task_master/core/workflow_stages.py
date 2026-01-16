@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -42,6 +43,34 @@ class WorkflowStageHandler:
         CheckRun has 'name' field, StatusContext has 'context' field.
         """
         return check.get("name") or check.get("context", "unknown")
+
+    @staticmethod
+    def _checkout_branch(branch: str) -> bool:
+        """Checkout to a branch.
+
+        Args:
+            branch: Branch name to checkout.
+
+        Returns:
+            True if successful, False otherwise.
+        """
+        try:
+            subprocess.run(
+                ["git", "checkout", branch],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                ["git", "pull"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return True
+        except subprocess.CalledProcessError as e:
+            console.warning(f"Failed to checkout {branch}: {e}")
+            return False
 
     def __init__(
         self,
@@ -321,6 +350,24 @@ After addressing ALL comments and creating the resolution file, end with: TASK C
             self.state_manager.save_state(state)
             return None
 
+        # Check if PR has conflicts
+        try:
+            pr_status = self.github_client.get_pr_status(state.current_pr)
+            if pr_status.mergeable == "CONFLICTING":
+                console.warning(f"PR #{state.current_pr} has merge conflicts!")
+                console.detail("Conflicts must be resolved before merging")
+                state.status = "blocked"
+                self.state_manager.save_state(state)
+                return 1
+            elif pr_status.mergeable == "UNKNOWN":
+                console.info("Waiting for GitHub to calculate mergeable status...")
+                if not interruptible_sleep(self.CI_POLL_INTERVAL):
+                    return None
+                return None  # Retry on next cycle
+        except Exception as e:
+            console.warning(f"Error checking mergeable status: {e}")
+            # Continue trying to merge anyway
+
         if state.options.auto_merge:
             console.info(f"Merging PR #{state.current_pr}...")
             try:
@@ -358,12 +405,27 @@ After addressing ALL comments and creating the resolution file, end with: TASK C
         if plan:
             mark_task_complete_fn(plan, state.current_task_index)
 
-        # Clear PR context files
+        # Clear PR context files and checkout to base branch
+        base_branch = "main"
         if state.current_pr is not None:
+            try:
+                # Get base branch from PR before clearing
+                pr_status = self.github_client.get_pr_status(state.current_pr)
+                base_branch = pr_status.base_branch
+            except Exception:
+                pass  # Use default main
+
             try:
                 self.state_manager.clear_pr_context(state.current_pr)
             except Exception:
                 pass  # Best effort cleanup
+
+        # Checkout to base branch to avoid conflicts on next task
+        console.info(f"Checking out to {base_branch}...")
+        if self._checkout_branch(base_branch):
+            console.success(f"Switched to {base_branch}")
+        else:
+            console.warning(f"Could not checkout to {base_branch}, may need manual checkout")
 
         # Move to next task
         state.current_task_index += 1

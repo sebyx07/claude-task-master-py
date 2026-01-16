@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -39,6 +40,15 @@ class PRContextManager:
         if pr_number is None:
             return
 
+        # Clear old CI logs to avoid stale data
+        try:
+            pr_dir = self.state_manager.get_pr_dir(pr_number)
+            ci_dir = pr_dir / "ci"
+            if ci_dir.exists():
+                shutil.rmtree(ci_dir)
+        except Exception:
+            pass  # Best effort cleanup
+
         try:
             failed_logs = self.github_client.get_failed_run_logs(max_lines=50)
         except Exception:
@@ -65,6 +75,19 @@ class PRContextManager:
         """
         if pr_number is None:
             return
+
+        # Clear old comments to avoid stale data
+        try:
+            pr_dir = self.state_manager.get_pr_dir(pr_number)
+            comments_dir = pr_dir / "comments"
+            if comments_dir.exists():
+                shutil.rmtree(comments_dir)
+            # Also remove old summary file
+            summary_file = pr_dir / "comments_summary.txt"
+            if summary_file.exists():
+                summary_file.unlink()
+        except Exception:
+            pass  # Best effort cleanup
 
         try:
             # Get repository info

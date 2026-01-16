@@ -20,6 +20,9 @@ class PRStatus(BaseModel):
     checks_pending: int = 0
     checks_skipped: int = 0
     check_details: list[dict[str, Any]]
+    # Mergeable status
+    mergeable: str = "UNKNOWN"  # MERGEABLE, CONFLICTING, UNKNOWN
+    base_branch: str = "main"
 
 
 class WorkflowRun(BaseModel):
@@ -82,6 +85,8 @@ class GitHubClient:
         query($owner: String!, $repo: String!, $pr: Int!) {
           repository(owner: $owner, name: $repo) {
             pullRequest(number: $pr) {
+              mergeable
+              baseRefName
               commits(last: 1) {
                 nodes {
                   commit {
@@ -203,6 +208,10 @@ class GitHubClient:
         )
         checks_pending = len(check_details) - checks_passed - checks_failed - checks_skipped
 
+        # Parse mergeable status
+        mergeable = pr_data.get("mergeable", "UNKNOWN")
+        base_branch = pr_data.get("baseRefName", "main")
+
         return PRStatus(
             number=pr_number,
             ci_state=ci_state,
@@ -214,6 +223,8 @@ class GitHubClient:
             checks_pending=checks_pending,
             checks_skipped=checks_skipped,
             check_details=check_details,
+            mergeable=mergeable,
+            base_branch=base_branch,
         )
 
     def get_pr_for_current_branch(self, cwd: str | None = None) -> int | None:
@@ -406,11 +417,21 @@ class GitHubClient:
         Returns:
             Formatted log output.
         """
-        cmd = ["gh", "run", "view"]
-        if run_id:
-            cmd.append(str(run_id))
-        cmd.append("--log-failed")
+        # If no run_id provided, get the latest failed run
+        if run_id is None:
+            runs = self.get_workflow_runs(limit=5)
+            failed_run = next(
+                (r for r in runs if r.conclusion in ("failure", "cancelled")),
+                None,
+            )
+            if failed_run:
+                run_id = failed_run.id
+            elif runs:
+                run_id = runs[0].id  # Use latest run as fallback
+            else:
+                return "No workflow runs found"
 
+        cmd = ["gh", "run", "view", str(run_id), "--log-failed"]
         result = subprocess.run(cmd, capture_output=True, text=True)
 
         if result.returncode != 0:
