@@ -12,7 +12,7 @@ from .circuit_breaker import (
     CircuitBreakerError,
     CircuitState,
 )
-from .prompts import build_planning_prompt, build_work_prompt
+from .prompts import build_planning_prompt, build_verification_prompt, build_work_prompt
 from .rate_limit import RateLimitConfig
 
 if TYPE_CHECKING:

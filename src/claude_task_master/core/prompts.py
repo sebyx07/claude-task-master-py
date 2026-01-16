@@ -385,8 +385,11 @@ Verify that all success criteria have been met."""
 - ✓ Criterion: PASSED (evidence)
 - ✗ Criterion: FAILED (reason)
 
-**If all criteria pass**: State "All criteria verified"
-**If any fail**: State what needs fixing""",
+**CRITICAL**: Your response MUST start with one of these two lines:
+- `VERIFICATION_RESULT: PASS` - if ALL criteria are met
+- `VERIFICATION_RESULT: FAIL` - if ANY criterion is not met
+
+Be strict - only say PASS if ALL criteria are truly met.""",
     )
 
     return builder.build()
