@@ -95,7 +95,16 @@ class WorkflowStageHandler:
                 self.state_manager.save_state(state)
                 return None
             else:
-                console.detail(f"CI pending... ({pr_status.ci_state})")
+                console.info(f"Waiting for CI... (status: {pr_status.ci_state})")
+                # Show individual check statuses if available
+                for check in pr_status.check_details:
+                    status = check.get("status", "unknown")
+                    name = check.get("name", "unknown")
+                    if status == "in_progress":
+                        console.detail(f"  ⏳ {name}: running")
+                    elif status == "queued":
+                        console.detail(f"  ⏸ {name}: queued")
+                console.detail(f"Next check in {self.CI_POLL_INTERVAL}s...")
                 if not interruptible_sleep(self.CI_POLL_INTERVAL):
                     return None  # Let main loop handle cancellation
                 return None
