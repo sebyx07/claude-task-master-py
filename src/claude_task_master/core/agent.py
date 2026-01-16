@@ -649,8 +649,12 @@ class AgentWrapper:
         effective_model = model_override or self.model
         model_name = self._get_model_name(effective_model)
 
-        # Log the model being used
-        console.detail(f"Using model: {effective_model.value} ({model_name})", flush=True)
+        # Log the model and tools being used
+        tools_str = ", ".join(tools) if tools else "all"
+        console.detail(
+            f"Using model: {effective_model.value} ({model_name}) | Tools: {tools_str}",
+            flush=True,
+        )
 
         try:
             # Change to working directory
