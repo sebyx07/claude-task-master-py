@@ -692,7 +692,9 @@ Please:
 1. Read the error messages carefully
 2. Make the necessary fixes
 3. Run tests locally to verify
-4. Commit and push the fixes"""
+4. Commit and push the fixes
+
+After fixing, end with: TASK COMPLETE"""
 
         # Run agent with Opus for complex debugging
         try:
@@ -777,9 +779,11 @@ Review comments:
 
 Please:
 1. Read each comment carefully
-2. Make the requested changes
+2. Make the requested changes (or explain why not needed)
 3. Run tests to verify
-4. Commit and push the fixes"""
+4. Commit and push the fixes
+
+After addressing ALL comments, end with: TASK COMPLETE"""
 
         # Run agent
         try:

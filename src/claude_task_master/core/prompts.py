@@ -309,23 +309,17 @@ EOF
 )"
 ```
 
-**5. Handle PRs** (CRITICAL - complete full cycle)
+**5. Push and Create PR** (if task requires it)
 ```bash
-# 1. Create PR with claudetm label
 git push -u origin HEAD
-gh pr create --title "..." --body "..." --label "claudetm"
-
-# 2. Wait for CI
-gh pr checks --watch
-
-# 3. Address feedback if any
-gh pr view --comments
-
-# 4. MERGE before next task (required!)
-gh pr merge --squash --delete-branch
+gh pr create --title "type: description" --body "..." --label "claudetm"
 ```
 
-**IMPORTANT**: Complete PR cycle (including merge) before starting new features.""",
+**NOTE**: After pushing, STOP. The orchestrator will:
+- Wait for CI
+- Feed you CI errors if any
+- Feed you review comments if any
+- Merge when ready""",
     )
 
     # Completion summary
