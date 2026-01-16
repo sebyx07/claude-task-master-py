@@ -217,6 +217,11 @@ After fixing, end with: TASK COMPLETE"""
             model_override=ModelType.OPUS,
         )
 
+        # Wait for CI to start after push
+        console.info("Waiting 30s for CI to start...")
+        if not interruptible_sleep(30):
+            return None
+
         state.workflow_stage = "waiting_ci"
         state.session_count += 1
         self.state_manager.save_state(state)
@@ -337,6 +342,11 @@ After addressing ALL comments and creating the resolution file, end with: TASK C
 
         # Post replies to comments using resolution file
         self.pr_context.post_comment_replies(state.current_pr)
+
+        # Wait for CI to start after push
+        console.info("Waiting 30s for CI to start...")
+        if not interruptible_sleep(30):
+            return None
 
         state.workflow_stage = "waiting_ci"
         state.session_count += 1
