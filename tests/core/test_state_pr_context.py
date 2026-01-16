@@ -11,15 +11,13 @@ from claude_task_master.core.state import StateManager
 @pytest.fixture
 def state_manager(tmp_path: Path) -> StateManager:
     """Create a StateManager with a temporary directory."""
-    original_cwd = Path.cwd()
-    import os
-
-    os.chdir(tmp_path)
-    sm = StateManager()
+    # Use explicit state_dir to avoid relative path issues
+    state_dir = tmp_path / ".claude-task-master"
+    sm = StateManager(state_dir=state_dir)
     yield sm
-    os.chdir(original_cwd)
-    if sm.state_dir.exists():
-        shutil.rmtree(sm.state_dir)
+    # Cleanup temp directory
+    if state_dir.exists():
+        shutil.rmtree(state_dir)
 
 
 class TestPRContextMethods:

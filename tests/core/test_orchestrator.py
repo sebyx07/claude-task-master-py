@@ -1612,3 +1612,557 @@ class TestSuccessOutput:
         assert result == 0  # Success
         captured = capsys.readouterr()
         assert "completed" in captured.out.lower() or "success" in captured.out.lower()
+
+
+# =============================================================================
+# PR Workflow Exception Tests
+# =============================================================================
+
+
+class TestPRWorkflowExceptions:
+    """Tests for PR workflow related exceptions."""
+
+    def test_pr_workflow_error(self):
+        """Test PRWorkflowError exception."""
+        from claude_task_master.core.orchestrator import PRWorkflowError
+
+        error = PRWorkflowError(pr_number=123, stage="merge", message="Merge conflict")
+        assert error.pr_number == 123
+        assert error.stage == "merge"
+        assert "PR #123" in error.message
+        assert "merge" in error.message or "Merge conflict" in str(error)
+
+    def test_ci_timeout_error(self):
+        """Test CITimeoutError exception."""
+        from claude_task_master.core.orchestrator import CITimeoutError
+
+        error = CITimeoutError(pr_number=456, timeout_seconds=300)
+        assert error.pr_number == 456
+        assert error.timeout_seconds == 300
+        assert "PR #456" in error.message
+        assert "300" in error.details or "300 seconds" in str(error)
+
+
+# =============================================================================
+# Workflow Stage Tests
+# =============================================================================
+
+
+class TestWorkflowStages:
+    """Tests for workflow stage handling."""
+
+    def test_workflow_stage_initialization(self, mock_agent_wrapper, state_dir, planner):
+        """Test that workflow stage is initialized correctly."""
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = None  # Not set
+        state_manager.save_state(state)
+        state_manager.save_plan("## Task List\n- [ ] Task 1")
+
+        mock_agent_wrapper.run_work_session.return_value = {"output": "Done", "success": True}
+        mock_agent_wrapper.verify_success_criteria.return_value = {"success": True}
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        # Manually call _run_workflow_cycle to test initialization
+        state = state_manager.load_state()
+        orchestrator._run_workflow_cycle(state)
+
+        # Stage should be initialized
+        updated_state = state_manager.load_state()
+        assert updated_state.workflow_stage is not None
+
+    def test_unknown_workflow_stage_resets_to_working(
+        self, mock_agent_wrapper, state_dir, planner, capsys
+    ):
+        """Test that unknown workflow stage resets to working.
+
+        Note: Since state validation prevents invalid workflow_stage values,
+        this test verifies the _run_workflow_cycle method's fallback handling
+        by directly manipulating the state object after loading.
+        """
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "working"  # Start with valid stage
+        state_manager.save_state(state)
+        state_manager.save_plan("## Task List\n- [ ] Task 1")
+
+        mock_agent_wrapper.run_work_session.return_value = {"output": "Done", "success": True}
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        # Load state and manually set invalid stage to test fallback
+        state = state_manager.load_state()
+        # Directly modify the state object's internal value to bypass Pydantic validation
+        # This simulates a corrupted state that somehow has an invalid workflow_stage
+        object.__setattr__(state, 'workflow_stage', 'invalid_stage')
+
+        # Call _run_workflow_cycle - it should handle the invalid stage gracefully
+        orchestrator._run_workflow_cycle(state)
+
+        # Should have printed warning and reset or saved with working stage
+        captured = capsys.readouterr()
+        assert "Unknown workflow stage" in captured.out
+        # Verify state was reset to working
+        assert state.workflow_stage == "working"
+
+    def test_handle_working_stage(self, mock_agent_wrapper, state_dir, planner):
+        """Test _handle_working_stage method."""
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "working"
+        state.session_count = 0
+        state_manager.save_state(state)
+        state_manager.save_plan("## Task List\n- [ ] Task 1")
+
+        mock_agent_wrapper.run_work_session.return_value = {"output": "Done", "success": True}
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        state = state_manager.load_state()
+        result = orchestrator._handle_working_stage(state)
+
+        # Should return None to continue
+        assert result is None
+        # Session count should be incremented
+        updated_state = state_manager.load_state()
+        assert updated_state.session_count == 1
+        # Should transition to pr_created
+        assert updated_state.workflow_stage == "pr_created"
+
+    def test_handle_pr_created_stage_no_pr(self, mock_agent_wrapper, state_dir, planner):
+        """Test _handle_pr_created_stage with no existing PR."""
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "pr_created"
+        state.current_pr = None
+        state_manager.save_state(state)
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        state = state_manager.load_state()
+        result = orchestrator._handle_pr_created_stage(state)
+
+        assert result is None
+        updated_state = state_manager.load_state()
+        assert updated_state.workflow_stage == "waiting_ci"
+
+    def test_handle_pr_created_stage_with_pr(self, mock_agent_wrapper, state_dir, planner, capsys):
+        """Test _handle_pr_created_stage with existing PR."""
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "pr_created"
+        state.current_pr = 123
+        state_manager.save_state(state)
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        state = state_manager.load_state()
+        result = orchestrator._handle_pr_created_stage(state)
+
+        assert result is None
+        updated_state = state_manager.load_state()
+        assert updated_state.workflow_stage == "waiting_ci"
+        captured = capsys.readouterr()
+        assert "PR #123" in captured.out
+
+    def test_handle_waiting_ci_stage_no_pr(self, mock_agent_wrapper, state_dir, planner):
+        """Test _handle_waiting_ci_stage skips CI when no PR."""
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "waiting_ci"
+        state.current_pr = None
+        state_manager.save_state(state)
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        state = state_manager.load_state()
+        result = orchestrator._handle_waiting_ci_stage(state)
+
+        assert result is None
+        updated_state = state_manager.load_state()
+        assert updated_state.workflow_stage == "waiting_reviews"
+
+    def test_handle_waiting_reviews_stage_no_pr(self, mock_agent_wrapper, state_dir, planner):
+        """Test _handle_waiting_reviews_stage skips when no PR."""
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "waiting_reviews"
+        state.current_pr = None
+        state_manager.save_state(state)
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        state = state_manager.load_state()
+        result = orchestrator._handle_waiting_reviews_stage(state)
+
+        assert result is None
+        updated_state = state_manager.load_state()
+        assert updated_state.workflow_stage == "merged"
+
+    def test_handle_ready_to_merge_stage_no_pr(self, mock_agent_wrapper, state_dir, planner):
+        """Test _handle_ready_to_merge_stage when no PR exists."""
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "ready_to_merge"
+        state.current_pr = None
+        state_manager.save_state(state)
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        state = state_manager.load_state()
+        result = orchestrator._handle_ready_to_merge_stage(state)
+
+        assert result is None
+        updated_state = state_manager.load_state()
+        assert updated_state.workflow_stage == "merged"
+
+    def test_handle_ready_to_merge_auto_merge_disabled(
+        self, mock_agent_wrapper, state_dir, planner, capsys
+    ):
+        """Test _handle_ready_to_merge_stage when auto_merge is disabled."""
+        state_manager = StateManager(state_dir)
+        options = TaskOptions(auto_merge=False)
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "ready_to_merge"
+        state.current_pr = 123
+        state_manager.save_state(state)
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        state = state_manager.load_state()
+        result = orchestrator._handle_ready_to_merge_stage(state)
+
+        assert result == 2  # Paused
+        updated_state = state_manager.load_state()
+        assert updated_state.status == "paused"
+        captured = capsys.readouterr()
+        assert "auto_merge disabled" in captured.out or "ready to merge" in captured.out.lower()
+
+    def test_handle_merged_stage(self, mock_agent_wrapper, state_dir, planner, capsys):
+        """Test _handle_merged_stage advances to next task."""
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "merged"
+        state.current_task_index = 0
+        state.current_pr = 123
+        state_manager.save_state(state)
+        state_manager.save_plan("## Task List\n- [ ] Task 1\n- [ ] Task 2")
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        state = state_manager.load_state()
+        result = orchestrator._handle_merged_stage(state)
+
+        assert result is None
+        updated_state = state_manager.load_state()
+        assert updated_state.current_task_index == 1
+        assert updated_state.current_pr is None
+        assert updated_state.workflow_stage == "working"
+        captured = capsys.readouterr()
+        assert "Task #1 complete" in captured.out
+
+
+# =============================================================================
+# GitHub Client Property Tests
+# =============================================================================
+
+
+class TestGitHubClientProperty:
+    """Tests for the github_client lazy initialization property."""
+
+    def test_github_client_returns_provided_client(self, mock_agent_wrapper, state_dir, planner):
+        """Test github_client returns provided client without init."""
+        from unittest.mock import MagicMock
+
+        state_manager = StateManager(state_dir)
+        state_manager.initialize(goal="Test", model="sonnet", options=TaskOptions())
+
+        provided_client = MagicMock()
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+            github_client=provided_client,
+        )
+
+        # Access the property
+        client = orchestrator.github_client
+
+        # Should return the provided client
+        assert client == provided_client
+
+    def test_github_client_caches_after_assignment(self, mock_agent_wrapper, state_dir, planner):
+        """Test github_client caches after direct assignment."""
+        from unittest.mock import MagicMock
+
+        state_manager = StateManager(state_dir)
+        state_manager.initialize(goal="Test", model="sonnet", options=TaskOptions())
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+            github_client=None,
+        )
+
+        # Manually set the private attribute (simulating lazy init)
+        mock_client = MagicMock()
+        orchestrator._github_client = mock_client
+
+        # Subsequent access should return the cached client
+        assert orchestrator.github_client == mock_client
+        assert orchestrator.github_client == mock_client  # Multiple accesses
+
+    def test_github_client_none_triggers_lazy_load_attempt(
+        self, mock_agent_wrapper, state_dir, planner
+    ):
+        """Test that None github_client triggers initialization attempt.
+
+        Note: Full lazy-load testing requires integration tests since the
+        GitHubClient import happens dynamically inside the property.
+        This test verifies the property correctly handles a provided client.
+        """
+        from unittest.mock import MagicMock
+
+        state_manager = StateManager(state_dir)
+        state_manager.initialize(goal="Test", model="sonnet", options=TaskOptions())
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+            github_client=None,
+        )
+
+        # Verify _github_client is None initially
+        assert orchestrator._github_client is None
+
+        # After setting a mock client, property returns it
+        mock_client = MagicMock()
+        orchestrator._github_client = mock_client
+        assert orchestrator.github_client == mock_client
+
+
+# =============================================================================
+# Task Complexity Routing Tests
+# =============================================================================
+
+
+class TestTaskComplexityRouting:
+    """Tests for task complexity-based model routing."""
+
+    def test_task_with_coding_tag_uses_opus(self, mock_agent_wrapper, state_dir, planner, capsys):
+        """Test that `[coding]` tag routes to Opus model."""
+        from claude_task_master.core.agent import ModelType
+
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "working"
+        state_manager.save_state(state)
+        state_manager.save_plan("## Task List\n- [ ] `[coding]` Implement complex feature")
+
+        mock_agent_wrapper.run_work_session.return_value = {"output": "Done", "success": True}
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        state = state_manager.load_state()
+        orchestrator._run_work_session(state)
+
+        # Should have used Opus model
+        call_kwargs = mock_agent_wrapper.run_work_session.call_args.kwargs
+        assert call_kwargs.get("model_override") == ModelType.OPUS
+        captured = capsys.readouterr()
+        assert "opus" in captured.out.lower()
+
+    def test_task_with_quick_tag_uses_haiku(self, mock_agent_wrapper, state_dir, planner, capsys):
+        """Test that `[quick]` tag routes to Haiku model."""
+        from claude_task_master.core.agent import ModelType
+
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "working"
+        state_manager.save_state(state)
+        state_manager.save_plan("## Task List\n- [ ] `[quick]` Fix typo in README")
+
+        mock_agent_wrapper.run_work_session.return_value = {"output": "Done", "success": True}
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        state = state_manager.load_state()
+        orchestrator._run_work_session(state)
+
+        # Should have used Haiku model
+        call_kwargs = mock_agent_wrapper.run_work_session.call_args.kwargs
+        assert call_kwargs.get("model_override") == ModelType.HAIKU
+        captured = capsys.readouterr()
+        assert "haiku" in captured.out.lower()
+
+    def test_task_with_general_tag_uses_sonnet(self, mock_agent_wrapper, state_dir, planner, capsys):
+        """Test that `[general]` tag routes to Sonnet model."""
+        from claude_task_master.core.agent import ModelType
+
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "working"
+        state_manager.save_state(state)
+        state_manager.save_plan("## Task List\n- [ ] `[general]` Update documentation")
+
+        mock_agent_wrapper.run_work_session.return_value = {"output": "Done", "success": True}
+
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+        )
+
+        state = state_manager.load_state()
+        orchestrator._run_work_session(state)
+
+        # Should have used Sonnet model
+        call_kwargs = mock_agent_wrapper.run_work_session.call_args.kwargs
+        assert call_kwargs.get("model_override") == ModelType.SONNET
+        captured = capsys.readouterr()
+        assert "sonnet" in captured.out.lower()
+
+
+# =============================================================================
+# Logger Integration Tests
+# =============================================================================
+
+
+class TestLoggerIntegration:
+    """Tests for logger integration in orchestrator."""
+
+    def test_logger_logs_session(self, mock_agent_wrapper, state_dir, planner):
+        """Test that logger records session start and end."""
+        from unittest.mock import MagicMock
+
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "working"
+        state_manager.save_state(state)
+        state_manager.save_plan("## Task List\n- [ ] Task 1")
+
+        mock_agent_wrapper.run_work_session.return_value = {"output": "Done", "success": True}
+
+        mock_logger = MagicMock()
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+            logger=mock_logger,
+        )
+
+        state = state_manager.load_state()
+        orchestrator._handle_working_stage(state)
+
+        # Logger should have been called
+        mock_logger.start_session.assert_called_once()
+        mock_logger.end_session.assert_called_once()
+        mock_logger.log_prompt.assert_called_once()
+
+    def test_logger_logs_error_on_exception(self, mock_agent_wrapper, state_dir, planner):
+        """Test that logger records errors when work session fails."""
+        from unittest.mock import MagicMock
+
+        state_manager = StateManager(state_dir)
+        options = TaskOptions()
+        state = state_manager.initialize(goal="Test", model="sonnet", options=options)
+        state.status = "working"
+        state.workflow_stage = "working"
+        state_manager.save_state(state)
+        state_manager.save_plan("## Task List\n- [ ] Task 1")
+
+        mock_agent_wrapper.run_work_session.side_effect = RuntimeError("Agent failed")
+
+        mock_logger = MagicMock()
+        orchestrator = WorkLoopOrchestrator(
+            agent=mock_agent_wrapper,
+            state_manager=state_manager,
+            planner=planner,
+            logger=mock_logger,
+        )
+
+        state = state_manager.load_state()
+
+        with pytest.raises(WorkSessionError):
+            orchestrator._run_work_session(state)
+
+        # Logger should have recorded error
+        mock_logger.log_error.assert_called()
