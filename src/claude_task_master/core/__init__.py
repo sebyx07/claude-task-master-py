@@ -72,6 +72,29 @@ from claude_task_master.core.prompts import (
     build_work_prompt,
 )
 from claude_task_master.core.rate_limit import RateLimitConfig
+from claude_task_master.core.circuit_breaker import (
+    CircuitBreaker,
+    CircuitBreakerConfig,
+    CircuitBreakerError,
+    CircuitBreakerMetrics,
+    CircuitBreakerRegistry,
+    CircuitState,
+    get_circuit_breaker,
+)
+from claude_task_master.core.parallel import (
+    AsyncParallelExecutor,
+    ParallelExecutor,
+    ParallelExecutorConfig,
+    ParallelTask,
+    TaskResult,
+    TaskStatus,
+)
+from claude_task_master.core.progress_tracker import (
+    ExecutionTracker,
+    ProgressState,
+    SessionMetrics,
+    TrackerConfig,
+)
 from claude_task_master.core.shutdown import (
     ShutdownManager,
     add_shutdown_callback,
@@ -195,4 +218,24 @@ __all__ = [
     "build_task_completion_check_prompt",
     "build_context_extraction_prompt",
     "build_error_recovery_prompt",
+    # Circuit breaker classes
+    "CircuitBreaker",
+    "CircuitBreakerConfig",
+    "CircuitBreakerError",
+    "CircuitBreakerMetrics",
+    "CircuitBreakerRegistry",
+    "CircuitState",
+    "get_circuit_breaker",
+    # Parallel executor classes
+    "AsyncParallelExecutor",
+    "ParallelExecutor",
+    "ParallelExecutorConfig",
+    "ParallelTask",
+    "TaskResult",
+    "TaskStatus",
+    # Execution tracker classes
+    "ExecutionTracker",
+    "ProgressState",
+    "SessionMetrics",
+    "TrackerConfig",
 ]
