@@ -109,37 +109,37 @@ def build_planning_prompt(goal: str, context: str | None = None) -> str:
         Complete planning prompt.
     """
     builder = PromptBuilder(
-        intro=f"""You are Claude Task Master, an autonomous agent that plans and executes complex tasks.
+        intro=f"""You are Claude Task Master in PLANNING MODE.
 
-Your mission: **{goal}**"""
+Your mission: **{goal}**
+
+**CRITICAL: This is PLANNING ONLY. You must STOP after creating the plan.**
+- Do NOT write code
+- Do NOT create git branches
+- Do NOT run tests
+- Do NOT launch Task agents to do work
+- ONLY explore the codebase and create the plan"""
     )
 
     # Context section if available
     if context:
         builder.add_section("Previous Context", context.strip())
 
-    # Exploration phase
+    # Exploration phase - READ ONLY
     builder.add_section(
-        "Phase 1: Setup & Explore",
-        """**First, set up your work branch:**
-```bash
-# Format: claudetm/<type>/<short-description>
-# Types: feat, fix, refactor, docs, test, chore
-git checkout -b claudetm/feat/your-feature-name
-```
-
-Then thoroughly analyze the codebase:
+        "Step 1: Explore Codebase (READ ONLY)",
+        """Thoroughly analyze the codebase using READ-ONLY operations:
 1. **Read** key files (README, configs, main modules)
 2. **Glob** to find patterns (`**/*.py`, `src/**/*.ts`)
 3. **Grep** for specific code (class definitions, imports)
 4. **Identify** tests, CI config, and coding standards
 
-**Important**: Add `.claude-task-master/` to .gitignore if not present.""",
+Understand the architecture before creating tasks.""",
     )
 
     # Task creation phase
     builder.add_section(
-        "Phase 2: Create Plan",
+        "Step 2: Create Task List",
         """Create an atomic, testable task list using this format:
 
 ```markdown
@@ -148,7 +148,7 @@ Then thoroughly analyze the codebase:
 - [ ] `[general]` Standard task like tests, docs, or refactoring
 ```
 
-**Model routing:**
+**Complexity tags (for model routing):**
 - `[coding]` → Opus (smartest) - new features, complex logic
 - `[quick]` → Haiku (fastest) - configs, small fixes
 - `[general]` → Sonnet (balanced) - tests, docs, refactoring
@@ -158,7 +158,12 @@ Then thoroughly analyze the codebase:
 **Task principles:**
 - Atomic: One PR-able unit of work per task
 - Ordered: Dependencies first
-- Grouped: Related tasks for same PR""",
+- Grouped: Related tasks for same PR
+
+**Include git branch creation as first task:**
+```markdown
+- [ ] `[quick]` Create feature branch: claudetm/feat/your-feature-name
+```""",
     )
 
     # PR strategy
@@ -167,17 +172,17 @@ Then thoroughly analyze the codebase:
         """Group related tasks into focused PRs:
 
 ```markdown
+- [ ] `[quick]` Create feature branch
 - [ ] `[coding]` Implement feature X core logic
 - [ ] `[general]` Add tests for feature X
 - [ ] `[quick]` Update docs
-- [ ] `[general]` Create PR, wait for CI
-- [ ] `[coding]` Address feedback if any
+- [ ] `[general]` Create PR, wait for CI, merge
 ```""",
     )
 
     # Success criteria
     builder.add_section(
-        "Success Criteria",
+        "Step 3: Define Success Criteria",
         """Define 3-5 measurable criteria:
 
 1. Tests pass (`pytest`, `npm test`)
@@ -187,6 +192,24 @@ Then thoroughly analyze the codebase:
 5. Specific functional requirement
 
 **Be specific and verifiable.**""",
+    )
+
+    # STOP instruction - critical
+    builder.add_section(
+        "STOP - Planning Complete",
+        """**After creating the task list and success criteria, STOP.**
+
+The orchestrator will:
+1. Save your plan to `plan.md`
+2. Save criteria to `criteria.txt`
+3. Start a NEW session for each task
+
+**Do NOT start implementing tasks. Your job is ONLY to plan.**
+
+End your response with:
+```
+PLANNING COMPLETE
+```""",
     )
 
     return builder.build()
@@ -215,11 +238,13 @@ def build_work_prompt(
         Complete work session prompt.
     """
     builder = PromptBuilder(
-        intro=f"""You are Claude Task Master executing a task autonomously.
+        intro=f"""You are Claude Task Master executing a SINGLE task.
 
 ## Current Task
 
-{task_description}"""
+{task_description}
+
+**Focus on THIS task only. Do not work ahead to other tasks.**"""
     )
 
     # Context section
@@ -305,13 +330,22 @@ gh pr merge --squash --delete-branch
 
     # Completion summary
     builder.add_section(
-        "On Completion",
-        """Report:
+        "On Completion - STOP",
+        """**After completing THIS task, STOP.**
+
+Report:
 1. What was completed
 2. Tests run and results
 3. Files modified
 4. Git status (commits, push)
-5. Any blockers""",
+5. Any blockers
+
+End your response with:
+```
+TASK COMPLETE
+```
+
+**The orchestrator will start a NEW session for the next task.**""",
     )
 
     return builder.build()

@@ -119,10 +119,11 @@ class TestBuildPlanningPrompt:
         prompt = build_planning_prompt("Build a todo app")
 
         assert "Build a todo app" in prompt
-        assert "Phase 1: Setup & Explore" in prompt
-        assert "Phase 2: Create Plan" in prompt
+        assert "Step 1: Explore Codebase" in prompt
+        assert "Step 2: Create Task List" in prompt
         assert "Success Criteria" in prompt
-        assert "git checkout -b claudetm" in prompt  # Branch checkout instruction
+        assert "PLANNING ONLY" in prompt  # Critical planning-only instruction
+        assert "STOP" in prompt  # Stop instruction
 
     def test_with_context(self) -> None:
         """Test planning prompt with context."""
@@ -150,12 +151,13 @@ class TestBuildPlanningPrompt:
         assert "PR Strategy" in prompt
         assert "gh pr create" in prompt or "Create PR" in prompt
 
-    def test_includes_gitignore_reminder(self) -> None:
-        """Test gitignore reminder is included."""
+    def test_includes_stop_instruction(self) -> None:
+        """Test STOP instruction is included."""
         prompt = build_planning_prompt("Any goal")
 
-        assert ".claude-task-master/" in prompt
-        assert ".gitignore" in prompt
+        assert "STOP - Planning Complete" in prompt
+        assert "PLANNING COMPLETE" in prompt
+        assert "Do NOT start implementing" in prompt
 
 
 # =============================================================================
