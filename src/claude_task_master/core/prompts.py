@@ -314,7 +314,9 @@ def build_work_prompt(
 ```bash
 git status
 ```
-Know where you are before making changes.
+- Know where you are before making changes
+- Verify you're on the correct branch (not main/master if working on a feature)
+- If on wrong branch, checkout to the correct one or create it
 
 **2. Understand the task**
 - Read files before modifying
