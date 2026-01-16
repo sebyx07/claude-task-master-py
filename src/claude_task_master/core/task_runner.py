@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from typing import TYPE_CHECKING
 
 from . import console
@@ -10,6 +11,20 @@ from .agent import (
     TaskComplexity,
     parse_task_complexity,
 )
+
+
+def get_current_branch() -> str | None:
+    """Get the current git branch name."""
+    try:
+        result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip() or None
+    except Exception:
+        return None
 
 if TYPE_CHECKING:
     from .agent import AgentWrapper
@@ -157,12 +172,16 @@ Please complete this task."""
         if self.logger:
             self.logger.log_prompt(task_description)
 
+        # Get current branch to pass to agent
+        current_branch = get_current_branch()
+
         # Run agent work session with model routing based on complexity
         try:
             result = self.agent.run_work_session(
                 task_description=task_description,
                 context=context,
                 model_override=target_model,
+                required_branch=current_branch,
             )
         except AgentError:
             if self.logger:

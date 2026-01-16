@@ -45,6 +45,20 @@ class WorkflowStageHandler:
         return check.get("name") or check.get("context", "unknown")
 
     @staticmethod
+    def _get_current_branch() -> str | None:
+        """Get the current git branch name."""
+        try:
+            result = subprocess.run(
+                ["git", "branch", "--show-current"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            return result.stdout.strip() or None
+        except Exception:
+            return None
+
+    @staticmethod
     def _checkout_branch(branch: str) -> bool:
         """Checkout to a branch.
 
@@ -211,10 +225,12 @@ After fixing, end with: TASK COMPLETE"""
         except Exception:
             context = ""
 
+        current_branch = self._get_current_branch()
         self.agent.run_work_session(
             task_description=task_description,
             context=context,
             model_override=ModelType.OPUS,
+            required_branch=current_branch,
         )
 
         # Wait for CI to start after push
@@ -334,10 +350,12 @@ After addressing ALL comments and creating the resolution file, end with: TASK C
         except Exception:
             context = ""
 
+        current_branch = self._get_current_branch()
         self.agent.run_work_session(
             task_description=task_description,
             context=context,
             model_override=ModelType.OPUS,
+            required_branch=current_branch,
         )
 
         # Post replies to comments using resolution file

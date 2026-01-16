@@ -421,6 +421,7 @@ class AgentWrapper:
         context: str = "",
         pr_comments: str | None = None,
         model_override: ModelType | None = None,
+        required_branch: str | None = None,
     ) -> dict[str, Any]:
         """Run a work session with full tools.
 
@@ -430,12 +431,13 @@ class AgentWrapper:
             pr_comments: PR review comments to address (if any).
             model_override: Optional model to use instead of default.
                            Used for dynamic model routing based on task complexity.
+            required_branch: Optional branch name the agent should be on.
 
         Returns:
             Dict with 'output' and 'success' keys.
         """
         # Build prompt for work session
-        prompt = self._build_work_prompt(task_description, context, pr_comments)
+        prompt = self._build_work_prompt(task_description, context, pr_comments, required_branch)
 
         # Run async query with optional model override
         result = asyncio.run(
@@ -881,7 +883,11 @@ class AgentWrapper:
         return build_planning_prompt(goal=goal, context=context if context else None)
 
     def _build_work_prompt(
-        self, task_description: str, context: str, pr_comments: str | None
+        self,
+        task_description: str,
+        context: str,
+        pr_comments: str | None,
+        required_branch: str | None = None,
     ) -> str:
         """Build prompt for work session.
 
@@ -891,6 +897,7 @@ class AgentWrapper:
             task_description=task_description,
             context=context if context else None,
             pr_comments=pr_comments,
+            required_branch=required_branch,
         )
 
     def _extract_plan(self, result: str) -> str:

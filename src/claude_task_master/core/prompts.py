@@ -258,6 +258,7 @@ def build_work_prompt(
     context: str | None = None,
     pr_comments: str | None = None,
     file_hints: list[str] | None = None,
+    required_branch: str | None = None,
 ) -> str:
     """Build the work session prompt.
 
@@ -266,16 +267,21 @@ def build_work_prompt(
         context: Optional accumulated context.
         pr_comments: Optional PR review comments to address.
         file_hints: Optional list of relevant files to check.
+        required_branch: Optional branch name the agent should be on.
 
     Returns:
         Complete work session prompt.
     """
+    branch_info = ""
+    if required_branch:
+        branch_info = f"\n\n**Required Branch:** `{required_branch}`"
+
     builder = PromptBuilder(
         intro=f"""You are Claude Task Master executing a SINGLE task.
 
 ## Current Task
 
-{task_description}
+{task_description}{branch_info}
 
 **Focus on THIS task only. Do not work ahead to other tasks.**"""
     )
@@ -315,7 +321,7 @@ def build_work_prompt(
 git status
 ```
 - Know where you are before making changes
-- Verify you're on the correct branch (not main/master if working on a feature)
+- Verify you're on the **Required Branch** specified above
 - If on wrong branch, checkout to the correct one or create it
 
 **2. Understand the task**
