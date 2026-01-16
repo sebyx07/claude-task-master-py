@@ -47,7 +47,9 @@ class TaskLogger:
         """Start logging a new session."""
         self.current_session = session_number
         self.session_start = datetime.now()
-        self._write(f"=== SESSION {session_number} | {phase.upper()} | {self.session_start.strftime('%H:%M:%S')} ===")
+        self._write(
+            f"=== SESSION {session_number} | {phase.upper()} | {self.session_start.strftime('%H:%M:%S')} ==="
+        )
 
     def log_prompt(self, prompt: str) -> None:
         """Log the prompt sent to Claude."""

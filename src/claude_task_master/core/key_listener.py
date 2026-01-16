@@ -71,8 +71,11 @@ class KeyListener:
             if sys.stdin.isatty():
                 self._original_settings = termios.tcgetattr(sys.stdin)
                 tty.setcbreak(sys.stdin.fileno())
-        except (ImportError, termios.error):
-            # Not a TTY or not on Unix
+        except ImportError:
+            # termios not available (not on Unix)
+            pass
+        except Exception:
+            # Terminal errors (e.g., termios.error)
             pass
 
     def _restore_terminal(self) -> None:
@@ -83,7 +86,11 @@ class KeyListener:
             if self._original_settings and sys.stdin.isatty():
                 termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._original_settings)
                 self._original_settings = None
-        except (ImportError, termios.error):
+        except ImportError:
+            # termios not available (not on Unix)
+            pass
+        except Exception:
+            # Terminal errors (e.g., termios.error)
             pass
 
     def _check_key(self) -> bool:
