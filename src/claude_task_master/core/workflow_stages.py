@@ -184,6 +184,20 @@ After fixing, end with: TASK COMPLETE"""
         try:
             pr_status = self.github_client.get_pr_status(state.current_pr)
 
+            # Check if ANY checks are still pending (CI, review bots, etc)
+            pending_checks = [
+                check.get("name", "unknown")
+                for check in pr_status.check_details
+                if check.get("status", "").upper() not in ("COMPLETED", "SUCCESS", "FAILURE", "ERROR", "SKIPPED")
+                or check.get("conclusion") is None and check.get("status", "").upper() != "COMPLETED"
+            ]
+
+            if pending_checks:
+                console.info(f"Waiting for checks to finish: {', '.join(pending_checks[:3])}...")
+                if not interruptible_sleep(self.CI_POLL_INTERVAL):
+                    return None
+                return None  # Will re-check on next cycle
+
             if pr_status.unresolved_threads > 0:
                 console.warning(f"Found {pr_status.unresolved_threads} unresolved review comments")
                 state.workflow_stage = "addressing_reviews"

@@ -123,19 +123,26 @@ class PRContextManager:
             data = json.loads(result.stdout)
             threads = data["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
 
-            # Convert to list of comment dicts - ONLY unresolved threads
+            # Convert to list of comment dicts - ONLY unresolved, actionable threads
             comments = []
             for thread in threads:
                 if thread["isResolved"]:
                     continue  # Skip resolved threads
                 thread_id = thread.get("id")
                 for comment in thread["comments"]["nodes"]:
+                    body = comment["body"]
+                    author = comment["author"]["login"]
+
+                    # Skip non-actionable bot comments
+                    if self._is_non_actionable_comment(author, body):
+                        continue
+
                     comments.append(
                         {
                             "thread_id": thread_id,
                             "comment_id": comment.get("id"),
-                            "author": comment["author"]["login"],
-                            "body": comment["body"],
+                            "author": author,
+                            "body": body,
                             "path": comment.get("path"),
                             "line": comment.get("line"),
                             "is_resolved": False,
@@ -265,3 +272,36 @@ class PRContextManager:
             capture_output=True,
             text=True,
         )
+
+    def _is_non_actionable_comment(self, author: str, body: str) -> bool:
+        """Check if a comment is non-actionable (bot status, summary, etc).
+
+        Args:
+            author: Comment author login.
+            body: Comment body text.
+
+        Returns:
+            True if comment should be skipped.
+        """
+        # Known bot authors with status/summary comments
+        bot_authors = ["coderabbitai", "github-actions", "dependabot"]
+
+        # Skip if from a bot and contains status indicators
+        if author.lower() in bot_authors:
+            status_indicators = [
+                "Currently processing",
+                "This is an auto-generated comment",
+                "<!-- ",  # Hidden HTML comments (summaries)
+                "Walkthrough",  # CodeRabbit summary sections
+                "Summary of changes",
+                "review in progress",
+            ]
+            for indicator in status_indicators:
+                if indicator.lower() in body.lower():
+                    return True
+
+        # Skip very short comments (likely not actionable)
+        if len(body.strip()) < 20:
+            return True
+
+        return False
