@@ -284,25 +284,28 @@ class PRContextManager:
         Returns:
             True if comment should be skipped.
         """
-        # Known bot authors with status/summary comments
-        bot_authors = ["coderabbitai", "github-actions", "dependabot"]
-
-        # Skip if from a bot and contains status indicators
-        if author.lower() in bot_authors:
-            status_indicators = [
-                "Currently processing",
-                "This is an auto-generated comment",
-                "<!-- ",  # Hidden HTML comments (summaries)
-                "Walkthrough",  # CodeRabbit summary sections
-                "Summary of changes",
-                "review in progress",
-            ]
-            for indicator in status_indicators:
-                if indicator.lower() in body.lower():
-                    return True
-
         # Skip very short comments (likely not actionable)
         if len(body.strip()) < 20:
             return True
+
+        # Known bot authors with status/summary comments
+        bot_authors = ["coderabbitai", "github-actions", "dependabot"]
+
+        # Skip if from a bot and is a pure status/summary comment (not a code review)
+        if author.lower() in bot_authors:
+            body_lower = body.lower()
+            # These indicate status updates, not code reviews
+            status_only_indicators = [
+                "currently processing",
+                "review in progress",
+                "is analyzing",
+            ]
+            for indicator in status_only_indicators:
+                if indicator in body_lower and len(body) < 200:
+                    return True
+
+            # Skip pure summary comments (no code suggestions)
+            if "walkthrough" in body_lower and "proposed fix" not in body_lower:
+                return True
 
         return False
