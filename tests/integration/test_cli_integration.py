@@ -143,9 +143,7 @@ class TestStartCommandIntegration:
         # Should suggest running doctor or show credentials error
         assert "doctor" in result.output.lower() or "credentials" in result.output.lower()
 
-    def test_start_full_workflow_with_mock_agent(
-        self, cli_runner, cli_integration_setup, mock_sdk
-    ):
+    def test_start_full_workflow_with_mock_agent(self, cli_runner, cli_integration_setup, mock_sdk):
         """Test complete start workflow with mocked agent."""
         # Configure mock SDK responses
         mock_sdk.set_planning_response(
@@ -211,7 +209,12 @@ class TestResumeCommandIntegration:
         assert "Loading credentials" in result.output
 
     def test_resume_with_expired_credentials(
-        self, cli_runner, integration_temp_dir, integration_state_dir, pre_planned_state, monkeypatch
+        self,
+        cli_runner,
+        integration_temp_dir,
+        integration_state_dir,
+        pre_planned_state,
+        monkeypatch,
     ):
         """Test resume handles expired credentials."""
         from datetime import timedelta
@@ -631,7 +634,12 @@ class TestErrorRecovery:
     """Tests for error recovery in CLI commands."""
 
     def test_resume_after_credential_fix(
-        self, cli_runner, integration_temp_dir, integration_state_dir, pre_planned_state, monkeypatch
+        self,
+        cli_runner,
+        integration_temp_dir,
+        integration_state_dir,
+        pre_planned_state,
+        monkeypatch,
     ):
         """Test resuming after fixing credential issues."""
         from datetime import timedelta
