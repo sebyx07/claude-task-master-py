@@ -452,23 +452,13 @@ class AgentWrapper:
         }
 
     def verify_success_criteria(self, criteria: str, context: str = "") -> dict[str, Any]:
-        """Verify if success criteria are met."""
-        prompt = f"""Review the following success criteria and verify if they have been met:
+        """Verify if success criteria are met.
 
-{criteria}
-
-{context}
-
-**IMPORTANT**: Your response MUST start with one of these two lines:
-- "VERIFICATION_RESULT: PASS" - if ALL criteria are met
-- "VERIFICATION_RESULT: FAIL" - if ANY criterion is not met
-
-Then provide:
-1. Whether each criterion is met (✓/✗)
-2. Evidence for each criterion
-3. Any issues or gaps
-
-Be strict - only say PASS if ALL criteria are truly met."""
+        Uses verification tools (Read, Glob, Grep, Bash) to actually run tests
+        and lint checks as specified in the verification prompt.
+        """
+        # Build prompt using centralized prompts module
+        prompt = build_verification_prompt(criteria=criteria, tasks_summary=context)
 
         # Run async query with verification tools (read + bash for running tests)
         result = asyncio.run(
