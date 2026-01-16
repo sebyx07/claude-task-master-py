@@ -29,7 +29,9 @@ class TestPRContextMethods:
         pr_dir = state_manager.get_pr_dir(123)
         assert pr_dir.exists()
         assert pr_dir.name == "123"
-        assert pr_dir.parent.name == "prs"
+        # Structure: .claude-task-master/debugging/pr/{number}/
+        assert pr_dir.parent.name == "pr"
+        assert pr_dir.parent.parent.name == "debugging"
 
     def test_get_pr_dir_returns_same_path(self, state_manager: StateManager) -> None:
         """Test that get_pr_dir returns consistent paths."""
@@ -184,7 +186,8 @@ class TestPRContextMethods:
         state_manager.save_pr_comments(123, [{"body": "Comment"}])
         state_manager.save_ci_failure(123, "tests", "Failure")
 
-        pr_dir = state_manager.state_dir / "prs" / "123"
+        # Structure: .claude-task-master/debugging/pr/{number}/
+        pr_dir = state_manager.state_dir / "debugging" / "pr" / "123"
         assert pr_dir.exists()
 
         state_manager.clear_pr_context(123)

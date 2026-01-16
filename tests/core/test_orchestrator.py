@@ -7,17 +7,16 @@ import pytest
 from claude_task_master.core.agent import AgentError, QueryExecutionError
 from claude_task_master.core.orchestrator import (
     MaxSessionsReachedError,
-    NoPlanFoundError,
-    NoTasksFoundError,
     OrchestratorError,
-    PlanParsingError,
     StateRecoveryError,
-    TaskIndexOutOfBoundsError,
-    VerificationFailedError,
     WorkLoopOrchestrator,
-    WorkSessionError,
 )
 from claude_task_master.core.state import StateManager, TaskOptions
+from claude_task_master.core.task_runner import (
+    NoPlanFoundError,
+    NoTasksFoundError,
+    WorkSessionError,
+)
 
 # =============================================================================
 # WorkLoopOrchestrator Initialization Tests
@@ -71,7 +70,7 @@ class TestTaskParsing:
 - [ ] Task 2
 - [ ] Task 3
 """
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
 
         assert len(tasks) == 3
         assert tasks[0] == "Task 1"
@@ -85,7 +84,7 @@ class TestTaskParsing:
 - [x] Completed Task 1
 - [x] Completed Task 2
 """
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
 
         assert len(tasks) == 2
         assert tasks[0] == "Completed Task 1"
@@ -100,7 +99,7 @@ class TestTaskParsing:
 - [x] Another Completed
 - [ ] Pending Task 2
 """
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
 
         assert len(tasks) == 4
         assert tasks[0] == "Completed Task"
@@ -110,7 +109,7 @@ class TestTaskParsing:
 
     def test_parse_tasks_empty_plan(self, orchestrator):
         """Test parsing empty plan returns empty list."""
-        tasks = orchestrator._parse_tasks("")
+        tasks = orchestrator.task_runner.parse_tasks("")
         assert tasks == []
 
     def test_parse_tasks_no_task_items(self, orchestrator):
@@ -123,7 +122,7 @@ Some descriptive text without tasks.
 
 1. All done
 """
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
         assert tasks == []
 
     def test_parse_tasks_preserves_task_content(self, orchestrator):
@@ -133,7 +132,7 @@ Some descriptive text without tasks.
 - [ ] Implement feature X with full error handling and logging
 - [ ] Add comprehensive unit tests covering edge cases
 """
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
 
         assert tasks[0] == "Implement feature X with full error handling and logging"
         assert tasks[1] == "Add comprehensive unit tests covering edge cases"
@@ -146,7 +145,7 @@ Some descriptive text without tasks.
     - [ ] More Indented Task 2
 - [ ] Normal Task
 """
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
 
         # All tasks should be found regardless of indentation
         assert len(tasks) == 3
@@ -158,7 +157,7 @@ Some descriptive text without tasks.
 - [ ]   Task with leading spaces
 - [ ]Task without space
 """
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
 
         assert len(tasks) == 2
         # First task should have stripped whitespace
@@ -173,7 +172,7 @@ Some descriptive text without tasks.
 * Another bullet
 + Plus bullet
 """
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
 
         assert len(tasks) == 1
         assert tasks[0] == "Actual Task"
@@ -194,8 +193,8 @@ class TestTaskCompletionDetection:
 - [ ] Task 1
 - [ ] Task 2
 """
-        assert orchestrator._is_task_complete(plan, 0) is False
-        assert orchestrator._is_task_complete(plan, 1) is False
+        assert orchestrator.task_runner.is_task_complete(plan, 0) is False
+        assert orchestrator.task_runner.is_task_complete(plan, 1) is False
 
     def test_is_task_complete_checked(self, orchestrator):
         """Test detecting checked task."""
@@ -204,8 +203,8 @@ class TestTaskCompletionDetection:
 - [x] Task 1
 - [x] Task 2
 """
-        assert orchestrator._is_task_complete(plan, 0) is True
-        assert orchestrator._is_task_complete(plan, 1) is True
+        assert orchestrator.task_runner.is_task_complete(plan, 0) is True
+        assert orchestrator.task_runner.is_task_complete(plan, 1) is True
 
     def test_is_task_complete_mixed(self, orchestrator):
         """Test detecting completion in mixed task list."""
@@ -215,9 +214,9 @@ class TestTaskCompletionDetection:
 - [ ] Pending Task
 - [x] Another Completed
 """
-        assert orchestrator._is_task_complete(plan, 0) is True
-        assert orchestrator._is_task_complete(plan, 1) is False
-        assert orchestrator._is_task_complete(plan, 2) is True
+        assert orchestrator.task_runner.is_task_complete(plan, 0) is True
+        assert orchestrator.task_runner.is_task_complete(plan, 1) is False
+        assert orchestrator.task_runner.is_task_complete(plan, 2) is True
 
     def test_is_task_complete_invalid_index(self, orchestrator):
         """Test invalid task index returns False."""
@@ -226,12 +225,12 @@ class TestTaskCompletionDetection:
 - [ ] Task 1
 - [ ] Task 2
 """
-        assert orchestrator._is_task_complete(plan, 10) is False
-        assert orchestrator._is_task_complete(plan, -1) is False
+        assert orchestrator.task_runner.is_task_complete(plan, 10) is False
+        assert orchestrator.task_runner.is_task_complete(plan, -1) is False
 
     def test_is_task_complete_empty_plan(self, orchestrator):
         """Test empty plan returns False."""
-        assert orchestrator._is_task_complete("", 0) is False
+        assert orchestrator.task_runner.is_task_complete("", 0) is False
 
 
 # =============================================================================
@@ -250,7 +249,7 @@ class TestTaskMarking:
 - [ ] Task 2
 """
         initialized_state_manager.save_plan(plan)
-        orchestrator._mark_task_complete(plan, 0)
+        orchestrator.task_runner.mark_task_complete(plan, 0)
 
         updated_plan = initialized_state_manager.load_plan()
         assert "- [x] Task 1" in updated_plan
@@ -265,7 +264,7 @@ class TestTaskMarking:
 - [ ] Task 3
 """
         initialized_state_manager.save_plan(plan)
-        orchestrator._mark_task_complete(plan, 1)
+        orchestrator.task_runner.mark_task_complete(plan, 1)
 
         updated_plan = initialized_state_manager.load_plan()
         assert "- [ ] Task 1" in updated_plan
@@ -280,7 +279,7 @@ class TestTaskMarking:
 - [ ] Task 2
 """
         initialized_state_manager.save_plan(plan)
-        orchestrator._mark_task_complete(plan, 1)
+        orchestrator.task_runner.mark_task_complete(plan, 1)
 
         updated_plan = initialized_state_manager.load_plan()
         assert "- [ ] Task 1" in updated_plan
@@ -294,7 +293,7 @@ class TestTaskMarking:
 - [ ] Task 2
 """
         initialized_state_manager.save_plan(plan)
-        orchestrator._mark_task_complete(plan, 0)
+        orchestrator.task_runner.mark_task_complete(plan, 0)
 
         updated_plan = initialized_state_manager.load_plan()
         # Should still be checked (no change)
@@ -313,7 +312,7 @@ class TestTaskMarking:
 2. No bugs
 """
         initialized_state_manager.save_plan(plan)
-        orchestrator._mark_task_complete(plan, 0)
+        orchestrator.task_runner.mark_task_complete(plan, 0)
 
         updated_plan = initialized_state_manager.load_plan()
         assert "## Success Criteria" in updated_plan
@@ -340,7 +339,7 @@ class TestIsComplete:
         state = initialized_state_manager.load_state()
         state.current_task_index = 2  # Processed both tasks
 
-        assert orchestrator._is_complete(state) is True
+        assert orchestrator.task_runner.is_all_complete(state) is True
 
     def test_is_complete_tasks_remaining(self, orchestrator, initialized_state_manager):
         """Test _is_complete when tasks remain."""
@@ -353,7 +352,7 @@ class TestIsComplete:
         state = initialized_state_manager.load_state()
         state.current_task_index = 1  # Only first task processed
 
-        assert orchestrator._is_complete(state) is False
+        assert orchestrator.task_runner.is_all_complete(state) is False
 
     def test_is_complete_no_plan(self, orchestrator, initialized_state_manager):
         """Test _is_complete with no plan returns True."""
@@ -363,7 +362,7 @@ class TestIsComplete:
             plan_file.unlink()
 
         state = initialized_state_manager.load_state()
-        assert orchestrator._is_complete(state) is True
+        assert orchestrator.task_runner.is_all_complete(state) is True
 
     def test_is_complete_empty_task_list(self, orchestrator, initialized_state_manager):
         """Test _is_complete with empty task list."""
@@ -380,7 +379,7 @@ No tasks defined.
         state.current_task_index = 0
 
         # Empty task list means complete (0 >= 0)
-        assert orchestrator._is_complete(state) is True
+        assert orchestrator.task_runner.is_all_complete(state) is True
 
 
 # =============================================================================
@@ -581,7 +580,7 @@ class TestRunWorkSession:
     def test_run_work_session_calls_agent(self, orchestrator, mock_agent_wrapper):
         """Test work session calls agent with correct parameters."""
         state = orchestrator.state_manager.load_state()
-        orchestrator._run_work_session(state)
+        orchestrator.task_runner.run_work_session(state)
 
         mock_agent_wrapper.run_work_session.assert_called_once()
         call_args = mock_agent_wrapper.run_work_session.call_args
@@ -591,7 +590,7 @@ class TestRunWorkSession:
     def test_run_work_session_includes_goal(self, orchestrator, mock_agent_wrapper):
         """Test work session includes goal in task description."""
         state = orchestrator.state_manager.load_state()
-        orchestrator._run_work_session(state)
+        orchestrator.task_runner.run_work_session(state)
 
         call_args = mock_agent_wrapper.run_work_session.call_args
         task_description = call_args.kwargs["task_description"]
@@ -600,7 +599,7 @@ class TestRunWorkSession:
     def test_run_work_session_includes_task(self, orchestrator, mock_agent_wrapper):
         """Test work session includes current task in description."""
         state = orchestrator.state_manager.load_state()
-        orchestrator._run_work_session(state)
+        orchestrator.task_runner.run_work_session(state)
 
         call_args = mock_agent_wrapper.run_work_session.call_args
         task_description = call_args.kwargs["task_description"]
@@ -613,7 +612,7 @@ class TestRunWorkSession:
         state = orchestrator.state_manager.load_state()
         initial_index = state.current_task_index
 
-        orchestrator._run_work_session(state)
+        orchestrator.task_runner.run_work_session(state)
 
         # Task index increment is now handled by _handle_merged_stage in the PR workflow
         # _run_work_session should NOT increment the index
@@ -625,7 +624,7 @@ class TestRunWorkSession:
     ):
         """Test work session saves progress."""
         state = orchestrator.state_manager.load_state()
-        orchestrator._run_work_session(state)
+        orchestrator.task_runner.run_work_session(state)
 
         progress = initialized_state_manager.load_progress()
         assert progress is not None
@@ -647,7 +646,7 @@ class TestRunWorkSession:
         state = orchestrator.state_manager.load_state()
         state.current_task_index = 0  # Point to completed task
 
-        orchestrator._run_work_session(state)
+        orchestrator.task_runner.run_work_session(state)
 
         # Agent should not have been called (task was skipped)
         mock_agent_wrapper.run_work_session.assert_not_called()
@@ -668,7 +667,7 @@ class TestRunWorkSession:
         state = orchestrator.state_manager.load_state()
 
         with pytest.raises(NoPlanFoundError):
-            orchestrator._run_work_session(state)
+            orchestrator.task_runner.run_work_session(state)
 
     def test_run_work_session_all_tasks_processed(
         self, orchestrator, mock_agent_wrapper, initialized_state_manager
@@ -683,7 +682,7 @@ class TestRunWorkSession:
         state.current_task_index = 1  # Beyond available tasks
 
         # Should return without error
-        orchestrator._run_work_session(state)
+        orchestrator.task_runner.run_work_session(state)
 
         # Agent should not have been called
         mock_agent_wrapper.run_work_session.assert_not_called()
@@ -860,7 +859,7 @@ class TestEdgeCases:
 - [ ] Support <brackets> & ampersands
 """
         initialized_state_manager.save_plan(plan)
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
 
         assert len(tasks) == 3
         assert "#123" in tasks[0]
@@ -876,7 +875,7 @@ class TestEdgeCases:
 - [ ] Process symbols ♠♣♥♦
 """
         initialized_state_manager.save_plan(plan)
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
 
         assert len(tasks) == 3
         assert "日本語" in tasks[0]
@@ -891,7 +890,7 @@ class TestEdgeCases:
 - [ ] Valid Task
 - [ ]
 """
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
 
         # Empty tasks should be filtered out
         assert len(tasks) == 1
@@ -905,7 +904,7 @@ class TestEdgeCases:
 {tasks_content}
 """
         initialized_state_manager.save_plan(plan)
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
 
         assert len(tasks) == 100
 
@@ -924,7 +923,7 @@ class TestEdgeCases:
 Some additional notes here.
 """
         initialized_state_manager.save_plan(plan)
-        tasks = orchestrator._parse_tasks(plan)
+        tasks = orchestrator.task_runner.parse_tasks(plan)
 
         # Should only capture checkbox items, not nested details
         assert len(tasks) == 2
@@ -1158,22 +1157,6 @@ class TestOrchestratorExceptions:
         assert error.details == "Additional details here"
         assert "Additional details" in str(error)
 
-    def test_plan_parsing_error(self):
-        """Test PlanParsingError."""
-        plan_content = "## Invalid Plan\n\nSome random content"
-        error = PlanParsingError("Failed to parse plan", plan_content)
-        assert error.message == "Failed to parse plan"
-        assert error.plan_content == plan_content
-        assert error.details and "Plan content preview" in error.details
-
-    def test_plan_parsing_error_truncates_long_content(self):
-        """Test PlanParsingError truncates long content."""
-        long_content = "x" * 500
-        error = PlanParsingError("Failed", long_content)
-        assert error.plan_content == long_content
-        # Preview should be truncated to 200 chars + "..."
-        assert error.details and len(error.details) < len(long_content) + 50
-
     def test_no_plan_found_error(self):
         """Test NoPlanFoundError."""
         error = NoPlanFoundError()
@@ -1185,15 +1168,8 @@ class TestOrchestratorExceptions:
         plan = "## Task List\n\nNo tasks here"
         error = NoTasksFoundError(plan)
         assert "No tasks found" in error.message
-        assert error.plan_content == plan
-
-    def test_task_index_out_of_bounds_error(self):
-        """Test TaskIndexOutOfBoundsError."""
-        error = TaskIndexOutOfBoundsError(5, 3)
-        assert error.task_index == 5
-        assert error.total_tasks == 3
-        assert "5" in error.message
-        assert error.details and "3 tasks" in error.details
+        # Plan preview is included in details
+        assert error.details and "Plan content preview" in error.details
 
     def test_work_session_error(self):
         """Test WorkSessionError."""
@@ -1219,13 +1195,6 @@ class TestOrchestratorExceptions:
         assert error.max_sessions == 10
         assert error.current_session == 10
         assert "10" in error.message
-
-    def test_verification_failed_error(self):
-        """Test VerificationFailedError."""
-        criteria = "1. All tests pass\n2. No bugs"
-        error = VerificationFailedError(criteria)
-        assert error.criteria == criteria
-        assert "verification" in error.message.lower()
 
 
 # =============================================================================
@@ -1253,7 +1222,7 @@ class TestRunWorkSessionErrorHandling:
         state = initialized_state_manager.load_state()
 
         with pytest.raises(NoPlanFoundError):
-            orchestrator._run_work_session(state)
+            orchestrator.task_runner.run_work_session(state)
 
     def test_run_work_session_raises_no_tasks_found(
         self, mock_agent_wrapper, initialized_state_manager, planner
@@ -1270,7 +1239,7 @@ class TestRunWorkSessionErrorHandling:
         state = initialized_state_manager.load_state()
 
         with pytest.raises(NoTasksFoundError):
-            orchestrator._run_work_session(state)
+            orchestrator.task_runner.run_work_session(state)
 
     def test_run_work_session_wraps_agent_errors(
         self, mock_agent_wrapper, initialized_state_manager, planner
@@ -1287,7 +1256,7 @@ class TestRunWorkSessionErrorHandling:
         state = initialized_state_manager.load_state()
 
         with pytest.raises(WorkSessionError) as exc_info:
-            orchestrator._run_work_session(state)
+            orchestrator.task_runner.run_work_session(state)
 
         assert exc_info.value.task_index == 0
         assert "Task 1" in exc_info.value.task_description
@@ -1309,7 +1278,7 @@ class TestRunWorkSessionErrorHandling:
 
         # AgentError subclasses should propagate through
         with pytest.raises(AgentError):
-            orchestrator._run_work_session(state)
+            orchestrator.task_runner.run_work_session(state)
 
 
 class TestRunErrorHandling:
@@ -1510,7 +1479,7 @@ class TestStateRecovery:
             planner=planner,
         )
 
-        description = orchestrator._get_current_task_description(state)
+        description = orchestrator.task_runner.get_current_task_description(state)
         assert description == "<unknown task>"
 
     def test_get_current_task_description_returns_task(
@@ -1527,7 +1496,7 @@ class TestStateRecovery:
             planner=planner,
         )
 
-        description = orchestrator._get_current_task_description(state)
+        description = orchestrator.task_runner.get_current_task_description(state)
         assert description == "Second task"
 
 
@@ -1617,35 +1586,6 @@ class TestSuccessOutput:
 
 
 # =============================================================================
-# PR Workflow Exception Tests
-# =============================================================================
-
-
-class TestPRWorkflowExceptions:
-    """Tests for PR workflow related exceptions."""
-
-    def test_pr_workflow_error(self):
-        """Test PRWorkflowError exception."""
-        from claude_task_master.core.orchestrator import PRWorkflowError
-
-        error = PRWorkflowError(pr_number=123, stage="merge", message="Merge conflict")
-        assert error.pr_number == 123
-        assert error.stage == "merge"
-        assert "PR #123" in error.message
-        assert "merge" in error.message or "Merge conflict" in str(error)
-
-    def test_ci_timeout_error(self):
-        """Test CITimeoutError exception."""
-        from claude_task_master.core.orchestrator import CITimeoutError
-
-        error = CITimeoutError(pr_number=456, timeout_seconds=300)
-        assert error.pr_number == 456
-        assert error.timeout_seconds == 300
-        assert "PR #456" in error.message
-        assert (error.details and "300" in error.details) or "300 seconds" in str(error)
-
-
-# =============================================================================
 # Workflow Stage Tests
 # =============================================================================
 
@@ -1716,7 +1656,7 @@ class TestWorkflowStages:
 
         # Should have printed warning and reset or saved with working stage
         captured = capsys.readouterr()
-        assert "Unknown workflow stage" in captured.out
+        assert "Unknown stage" in captured.out
         # Verify state was reset to working
         assert state.workflow_stage == "working"
 
@@ -1767,7 +1707,7 @@ class TestWorkflowStages:
         )
 
         state = state_manager.load_state()
-        result = orchestrator._handle_pr_created_stage(state)
+        result = orchestrator.stage_handler.handle_pr_created_stage(state)
 
         assert result is None
         updated_state = state_manager.load_state()
@@ -1790,7 +1730,7 @@ class TestWorkflowStages:
         )
 
         state = state_manager.load_state()
-        result = orchestrator._handle_pr_created_stage(state)
+        result = orchestrator.stage_handler.handle_pr_created_stage(state)
 
         assert result is None
         updated_state = state_manager.load_state()
@@ -1815,7 +1755,7 @@ class TestWorkflowStages:
         )
 
         state = state_manager.load_state()
-        result = orchestrator._handle_waiting_ci_stage(state)
+        result = orchestrator.stage_handler.handle_waiting_ci_stage(state)
 
         assert result is None
         updated_state = state_manager.load_state()
@@ -1838,7 +1778,7 @@ class TestWorkflowStages:
         )
 
         state = state_manager.load_state()
-        result = orchestrator._handle_waiting_reviews_stage(state)
+        result = orchestrator.stage_handler.handle_waiting_reviews_stage(state)
 
         assert result is None
         updated_state = state_manager.load_state()
@@ -1861,7 +1801,7 @@ class TestWorkflowStages:
         )
 
         state = state_manager.load_state()
-        result = orchestrator._handle_ready_to_merge_stage(state)
+        result = orchestrator.stage_handler.handle_ready_to_merge_stage(state)
 
         assert result is None
         updated_state = state_manager.load_state()
@@ -1886,7 +1826,7 @@ class TestWorkflowStages:
         )
 
         state = state_manager.load_state()
-        result = orchestrator._handle_ready_to_merge_stage(state)
+        result = orchestrator.stage_handler.handle_ready_to_merge_stage(state)
 
         assert result == 2  # Paused
         updated_state = state_manager.load_state()
@@ -1913,7 +1853,9 @@ class TestWorkflowStages:
         )
 
         state = state_manager.load_state()
-        result = orchestrator._handle_merged_stage(state)
+        result = orchestrator.stage_handler.handle_merged_stage(
+            state, orchestrator.task_runner.mark_task_complete
+        )
 
         assert result is None
         updated_state = state_manager.load_state()
@@ -2034,7 +1976,7 @@ class TestTaskComplexityRouting:
         )
 
         state = state_manager.load_state()
-        orchestrator._run_work_session(state)
+        orchestrator.task_runner.run_work_session(state)
 
         # Should have used Opus model
         call_kwargs = mock_agent_wrapper.run_work_session.call_args.kwargs
@@ -2063,7 +2005,7 @@ class TestTaskComplexityRouting:
         )
 
         state = state_manager.load_state()
-        orchestrator._run_work_session(state)
+        orchestrator.task_runner.run_work_session(state)
 
         # Should have used Haiku model
         call_kwargs = mock_agent_wrapper.run_work_session.call_args.kwargs
@@ -2094,7 +2036,7 @@ class TestTaskComplexityRouting:
         )
 
         state = state_manager.load_state()
-        orchestrator._run_work_session(state)
+        orchestrator.task_runner.run_work_session(state)
 
         # Should have used Sonnet model
         call_kwargs = mock_agent_wrapper.run_work_session.call_args.kwargs
@@ -2166,7 +2108,7 @@ class TestLoggerIntegration:
         state = state_manager.load_state()
 
         with pytest.raises(WorkSessionError):
-            orchestrator._run_work_session(state)
+            orchestrator.task_runner.run_work_session(state)
 
         # Logger should have recorded error
         mock_logger.log_error.assert_called()
@@ -2328,7 +2270,7 @@ class TestCIStageHandling:
             github_client=mock_github_client,
         )
 
-        result = orchestrator._handle_waiting_ci_stage(state)
+        result = orchestrator.stage_handler.handle_waiting_ci_stage(state)
 
         assert result is None
         assert state.workflow_stage == "waiting_reviews"  # type: ignore[comparison-overlap]
@@ -2362,7 +2304,7 @@ class TestCIStageHandling:
             github_client=mock_github_client,
         )
 
-        result = orchestrator._handle_waiting_ci_stage(state)
+        result = orchestrator.stage_handler.handle_waiting_ci_stage(state)
 
         assert result is None
         assert state.workflow_stage == "ci_failed"  # type: ignore[comparison-overlap]
@@ -2394,7 +2336,7 @@ class TestCIStageHandling:
         )
 
         with patch("time.sleep"):  # Skip actual sleep
-            result = orchestrator._handle_waiting_ci_stage(state)
+            result = orchestrator.stage_handler.handle_waiting_ci_stage(state)
 
         assert result is None
         # Stage should remain waiting_ci for pending
@@ -2423,7 +2365,7 @@ class TestCIStageHandling:
             github_client=mock_github_client,
         )
 
-        result = orchestrator._handle_waiting_ci_stage(state)
+        result = orchestrator.stage_handler.handle_waiting_ci_stage(state)
 
         assert result is None
         # Should skip to reviews on error
@@ -2458,7 +2400,7 @@ class TestCIStageHandling:
             github_client=mock_github_client,
         )
 
-        result = orchestrator._handle_ci_failed_stage(state)
+        result = orchestrator.stage_handler.handle_ci_failed_stage(state)
 
         assert result is None
         assert state.workflow_stage == "waiting_ci"  # type: ignore[comparison-overlap]
@@ -2501,7 +2443,7 @@ class TestReviewStageHandling:
             github_client=mock_github_client,
         )
 
-        result = orchestrator._handle_waiting_reviews_stage(state)
+        result = orchestrator.stage_handler.handle_waiting_reviews_stage(state)
 
         assert result is None
         assert state.workflow_stage == "addressing_reviews"  # type: ignore[comparison-overlap]
@@ -2533,7 +2475,7 @@ class TestReviewStageHandling:
             github_client=mock_github_client,
         )
 
-        result = orchestrator._handle_waiting_reviews_stage(state)
+        result = orchestrator.stage_handler.handle_waiting_reviews_stage(state)
 
         assert result is None
         assert state.workflow_stage == "ready_to_merge"  # type: ignore[comparison-overlap]
@@ -2561,7 +2503,7 @@ class TestReviewStageHandling:
             github_client=mock_github_client,
         )
 
-        result = orchestrator._handle_waiting_reviews_stage(state)
+        result = orchestrator.stage_handler.handle_waiting_reviews_stage(state)
 
         assert result is None
         # Should skip to ready_to_merge on error
@@ -2593,8 +2535,9 @@ class TestReviewStageHandling:
             github_client=mock_github_client,
         )
 
-        with patch.object(orchestrator, "_save_pr_comments_to_files"):
-            result = orchestrator._handle_addressing_reviews_stage(state)
+        with patch.object(orchestrator.pr_context, "save_pr_comments"):
+            with patch.object(orchestrator.pr_context, "post_comment_replies"):
+                result = orchestrator.stage_handler.handle_addressing_reviews_stage(state)
 
         assert result is None
         assert state.workflow_stage == "waiting_ci"  # type: ignore[comparison-overlap]
@@ -2621,7 +2564,7 @@ class TestReviewStageHandling:
             planner=planner,
         )
 
-        result = orchestrator._handle_addressing_reviews_stage(state)
+        result = orchestrator.stage_handler.handle_addressing_reviews_stage(state)
 
         assert result is None
         assert state.workflow_stage == "waiting_ci"  # type: ignore[comparison-overlap]
@@ -2660,7 +2603,7 @@ class TestMergeStageHandling:
             github_client=mock_github_client,
         )
 
-        result = orchestrator._handle_ready_to_merge_stage(state)
+        result = orchestrator.stage_handler.handle_ready_to_merge_stage(state)
 
         assert result is None
         assert state.workflow_stage == "merged"  # type: ignore[comparison-overlap]
@@ -2691,7 +2634,7 @@ class TestMergeStageHandling:
             github_client=mock_github_client,
         )
 
-        result = orchestrator._handle_ready_to_merge_stage(state)
+        result = orchestrator.stage_handler.handle_ready_to_merge_stage(state)
 
         assert result == 1
         assert state.status == "blocked"  # type: ignore[comparison-overlap]
@@ -2716,7 +2659,9 @@ class TestMergeStageHandling:
 
         with patch.object(state_manager, "clear_pr_context") as mock_clear:
             with patch("claude_task_master.core.key_listener.reset_escape"):
-                result = orchestrator._handle_merged_stage(state)
+                result = orchestrator.stage_handler.handle_merged_stage(
+                    state, orchestrator.task_runner.mark_task_complete
+                )
 
         assert result is None
         assert state.current_task_index == 1

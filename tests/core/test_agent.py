@@ -597,16 +597,17 @@ class TestAgentWrapperPromptBuilding:
         prompt = agent._build_planning_prompt("Test goal", "")
 
         # Uses centralized prompts.py format
-        assert "Create Plan" in prompt  # Phase 2: Create Plan
+        assert "Create Task List" in prompt  # Step 2: Create Task List
         assert "- [ ]" in prompt
         assert "Success Criteria" in prompt
 
-    def test_build_planning_prompt_includes_gitignore_instruction(self, agent):
-        """Test _build_planning_prompt includes .gitignore instruction."""
+    def test_build_planning_prompt_includes_exploration_instruction(self, agent):
+        """Test _build_planning_prompt includes exploration instruction."""
         prompt = agent._build_planning_prompt("Test goal", "")
 
-        assert ".gitignore" in prompt
-        assert ".claude-task-master/" in prompt
+        # Must explore codebase before creating tasks
+        assert "Explore" in prompt
+        assert "READ ONLY" in prompt or "Read" in prompt
 
     def test_build_planning_prompt_mentions_tools(self, agent):
         """Test _build_planning_prompt mentions available tools."""

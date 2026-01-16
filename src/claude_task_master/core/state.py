@@ -976,6 +976,7 @@ FAILURE LOGS:
         Args:
             pr_number: The PR number.
         """
-        pr_dir = self.state_dir / "prs" / str(pr_number)
+        # Use the same path structure as get_pr_dir
+        pr_dir = self.state_dir / "debugging" / "pr" / str(pr_number)
         if pr_dir.exists():
             shutil.rmtree(pr_dir)

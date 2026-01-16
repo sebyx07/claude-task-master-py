@@ -1,0 +1,331 @@
+"""Task Runner - Execute individual tasks from the plan."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from . import console
+from .agent import (
+    AgentError,
+    TaskComplexity,
+    parse_task_complexity,
+)
+
+if TYPE_CHECKING:
+    from .agent import AgentWrapper
+    from .logger import TaskLogger
+    from .state import StateManager, TaskState
+
+
+class TaskRunnerError(Exception):
+    """Base exception for task runner errors."""
+
+    def __init__(self, message: str, details: str | None = None):
+        self.message = message
+        self.details = details
+        super().__init__(self._format_message())
+
+    def _format_message(self) -> str:
+        if self.details:
+            return f"{self.message}\n  Details: {self.details}"
+        return self.message
+
+
+class NoPlanFoundError(TaskRunnerError):
+    """Raised when no plan file exists."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "No plan found",
+            "The plan file does not exist. Please run the planning phase first.",
+        )
+
+
+class NoTasksFoundError(TaskRunnerError):
+    """Raised when the plan contains no tasks."""
+
+    def __init__(self, plan_content: str | None = None):
+        details = None
+        if plan_content:
+            preview = plan_content[:200] + "..." if len(plan_content) > 200 else plan_content
+            details = f"Plan content preview: {preview}"
+        super().__init__("No tasks found in plan", details)
+
+
+class WorkSessionError(TaskRunnerError):
+    """Raised when a work session fails."""
+
+    def __init__(self, task_index: int, task_description: str, original_error: Exception):
+        self.task_index = task_index
+        self.task_description = task_description
+        self.original_error = original_error
+        super().__init__(
+            f"Work session failed for task #{task_index + 1}: {task_description}",
+            f"Error: {type(original_error).__name__}: {original_error}",
+        )
+
+
+class TaskRunner:
+    """Executes individual tasks from the plan."""
+
+    def __init__(
+        self,
+        agent: AgentWrapper,
+        state_manager: StateManager,
+        logger: TaskLogger | None = None,
+    ):
+        """Initialize task runner.
+
+        Args:
+            agent: The agent wrapper for running queries.
+            state_manager: The state manager for persistence.
+            logger: Optional logger for recording activity.
+        """
+        self.agent = agent
+        self.state_manager = state_manager
+        self.logger = logger
+
+    def run_work_session(self, state: TaskState) -> None:
+        """Run a single work session.
+
+        Args:
+            state: Current task state.
+
+        Raises:
+            NoPlanFoundError: If no plan file exists.
+            NoTasksFoundError: If the plan contains no tasks.
+            WorkSessionError: If the work session fails.
+        """
+        # Get current task from plan
+        plan = self.state_manager.load_plan()
+        if not plan:
+            raise NoPlanFoundError()
+
+        try:
+            tasks = self.parse_tasks(plan)
+        except Exception as e:
+            raise TaskRunnerError(f"Failed to parse plan: {e}") from e
+
+        if not tasks:
+            raise NoTasksFoundError(plan)
+
+        if state.current_task_index >= len(tasks):
+            # All tasks processed
+            return
+
+        current_task = tasks[state.current_task_index]
+
+        # Check if task is already complete
+        if self.is_task_complete(plan, state.current_task_index):
+            console.newline()
+            console.success(
+                f"Task #{state.current_task_index + 1} already complete: {current_task}"
+            )
+            state.current_task_index += 1
+            self.state_manager.save_state(state)
+            return
+
+        # Parse task complexity to determine which model to use
+        complexity, cleaned_task = parse_task_complexity(current_task)
+        target_model = TaskComplexity.get_model_for_complexity(complexity)
+
+        # Load context safely
+        try:
+            context = self.state_manager.load_context()
+        except Exception as e:
+            console.warning(f"Could not load context: {e}")
+            context = ""
+
+        # Build task description
+        try:
+            goal = self.state_manager.load_goal()
+        except Exception as e:
+            console.warning(f"Could not load goal: {e}")
+            goal = "Complete the assigned task"
+
+        task_description = f"""Goal: {goal}
+
+Current Task (#{state.current_task_index + 1}): {cleaned_task}
+
+Please complete this task."""
+
+        console.newline()
+        console.info(f"Working on task #{state.current_task_index + 1}: {cleaned_task}")
+        console.detail(f"Complexity: {complexity.value} → Model: {target_model.value}")
+
+        # Log the prompt
+        if self.logger:
+            self.logger.log_prompt(task_description)
+
+        # Run agent work session with model routing based on complexity
+        try:
+            result = self.agent.run_work_session(
+                task_description=task_description,
+                context=context,
+                model_override=target_model,
+            )
+        except AgentError:
+            if self.logger:
+                self.logger.log_error("Agent error during work session")
+            raise
+        except Exception as e:
+            if self.logger:
+                self.logger.log_error(str(e))
+            raise WorkSessionError(
+                state.current_task_index,
+                current_task,
+                e,
+            ) from e
+
+        # Log the response
+        if self.logger and result.get("output"):
+            self.logger.log_response(result.get("output", ""))
+
+        # Update progress
+        self._update_progress(state, tasks, current_task, plan, result)
+
+    def _update_progress(
+        self,
+        state: TaskState,
+        tasks: list[str],
+        current_task: str,
+        plan: str,
+        result: dict,
+    ) -> None:
+        """Update progress tracker after task completion."""
+        progress_lines = [
+            "# Progress Tracker\n",
+            f"**Session:** {state.session_count + 1}",
+            f"**Current Task:** {state.current_task_index + 1} of {len(tasks)}\n",
+            "## Task List\n",
+        ]
+
+        # Add all tasks with their status
+        for i, task in enumerate(tasks):
+            is_complete = self.is_task_complete(plan, i)
+            is_current = i == state.current_task_index
+
+            if is_complete:
+                status = "✓"
+                marker = "[x]"
+            elif is_current:
+                status = "→"
+                marker = "[ ]"
+            else:
+                status = " "
+                marker = "[ ]"
+
+            progress_lines.append(f"{status} {marker} **Task {i + 1}:** {task}")
+
+        # Add latest result if available
+        if result.get("output"):
+            progress_lines.extend(
+                [
+                    "\n## Latest Completed",
+                    f"**Task {state.current_task_index + 1}:** {current_task}\n",
+                    "### Summary",
+                    result.get("output", "Completed"),
+                ]
+            )
+
+        progress = "\n".join(progress_lines)
+
+        try:
+            self.state_manager.save_progress(progress)
+        except Exception as e:
+            console.warning(f"Could not save progress: {e}")
+
+    def get_current_task_description(self, state: TaskState) -> str:
+        """Get the description of the current task.
+
+        Args:
+            state: Current task state.
+
+        Returns:
+            Task description string or placeholder if not found.
+        """
+        try:
+            plan = self.state_manager.load_plan()
+            if not plan:
+                return "<unknown task>"
+
+            tasks = self.parse_tasks(plan)
+            if state.current_task_index < len(tasks):
+                return tasks[state.current_task_index]
+            return f"<task index {state.current_task_index}>"
+        except Exception:
+            return "<unknown task>"
+
+    def parse_tasks(self, plan: str) -> list[str]:
+        """Parse tasks from plan markdown.
+
+        Args:
+            plan: The plan markdown content.
+
+        Returns:
+            List of task descriptions.
+        """
+        tasks = []
+        for line in plan.split("\n"):
+            if line.strip().startswith("- [ ]") or line.strip().startswith("- [x]"):
+                task = line.strip()[5:].strip()  # Remove "- [ ]" or "- [x]"
+                if task:
+                    tasks.append(task)
+        return tasks
+
+    def is_task_complete(self, plan: str, task_index: int) -> bool:
+        """Check if a task is already marked as complete.
+
+        Args:
+            plan: The plan markdown content.
+            task_index: Index of the task to check.
+
+        Returns:
+            True if task is complete, False otherwise.
+        """
+        lines = plan.split("\n")
+        task_count = -1
+
+        for line in lines:
+            if line.strip().startswith("- [ ]") or line.strip().startswith("- [x]"):
+                task_count += 1
+                if task_count == task_index:
+                    return line.strip().startswith("- [x]")
+
+        return False
+
+    def mark_task_complete(self, plan: str, task_index: int) -> None:
+        """Mark a task as complete in the plan.
+
+        Args:
+            plan: The plan markdown content.
+            task_index: Index of the task to mark complete.
+        """
+        lines = plan.split("\n")
+        task_count = -1
+
+        for i, line in enumerate(lines):
+            if line.strip().startswith("- [ ]") or line.strip().startswith("- [x]"):
+                task_count += 1
+                if task_count == task_index:
+                    lines[i] = line.replace("- [ ]", "- [x]", 1)
+                    break
+
+        updated_plan = "\n".join(lines)
+        self.state_manager.save_plan(updated_plan)
+
+    def is_all_complete(self, state: TaskState) -> bool:
+        """Check if all tasks are complete.
+
+        Args:
+            state: Current task state.
+
+        Returns:
+            True if all tasks are processed.
+        """
+        plan = self.state_manager.load_plan()
+        if not plan:
+            return True
+
+        tasks = self.parse_tasks(plan)
+        return state.current_task_index >= len(tasks)

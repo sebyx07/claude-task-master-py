@@ -63,15 +63,9 @@ from claude_task_master.core.hooks import (
 )
 from claude_task_master.core.orchestrator import (
     MaxSessionsReachedError,
-    NoPlanFoundError,
-    NoTasksFoundError,
     OrchestratorError,
-    PlanParsingError,
     StateRecoveryError,
-    TaskIndexOutOfBoundsError,
-    VerificationFailedError,
     WorkLoopOrchestrator,
-    WorkSessionError,
 )
 from claude_task_master.core.parallel import (
     AsyncParallelExecutor,
@@ -81,6 +75,7 @@ from claude_task_master.core.parallel import (
     TaskResult,
     TaskStatus,
 )
+from claude_task_master.core.pr_context import PRContextManager
 from claude_task_master.core.progress_tracker import (
     ExecutionTracker,
     ProgressState,
@@ -123,6 +118,14 @@ from claude_task_master.core.state import (
     TaskOptions,
     TaskState,
 )
+from claude_task_master.core.task_runner import (
+    NoPlanFoundError,
+    NoTasksFoundError,
+    TaskRunner,
+    TaskRunnerError,
+    WorkSessionError,
+)
+from claude_task_master.core.workflow_stages import WorkflowStageHandler
 
 __all__ = [
     # Console module
@@ -186,16 +189,21 @@ __all__ = [
     "TaskOptions",
     # Orchestrator exceptions
     "OrchestratorError",
-    "PlanParsingError",
-    "NoPlanFoundError",
-    "NoTasksFoundError",
-    "TaskIndexOutOfBoundsError",
-    "WorkSessionError",
     "StateRecoveryError",
     "MaxSessionsReachedError",
-    "VerificationFailedError",
     # Orchestrator classes
     "WorkLoopOrchestrator",
+    # Task runner exceptions
+    "TaskRunnerError",
+    "NoPlanFoundError",
+    "NoTasksFoundError",
+    "WorkSessionError",
+    # Task runner classes
+    "TaskRunner",
+    # PR context classes
+    "PRContextManager",
+    # Workflow stage classes
+    "WorkflowStageHandler",
     # Shutdown classes and functions
     "ShutdownManager",
     "get_shutdown_manager",
