@@ -16,6 +16,8 @@ import os
 from pathlib import Path
 from typing import Any, Literal
 
+from claude_task_master.mcp import tools
+
 # Import MCP SDK - using try/except for graceful degradation
 try:
     from mcp.server.fastmcp import FastMCP
@@ -27,8 +29,6 @@ logger = logging.getLogger(__name__)
 # Security: Default host for network transports
 MCP_HOST = os.getenv("CLAUDETM_MCP_HOST", "127.0.0.1")
 MCP_PORT = int(os.getenv("CLAUDETM_MCP_PORT", "8080"))
-
-from claude_task_master.mcp import tools
 
 # =============================================================================
 # Re-export response models for convenience

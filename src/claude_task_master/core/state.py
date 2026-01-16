@@ -323,7 +323,7 @@ class StateManager:
             self._pid_file.parent.mkdir(parents=True, exist_ok=True)
             self._pid_file.write_text(str(os.getpid()))
             return True
-        except (OSError, IOError):
+        except OSError:
             return False
 
     def release_session_lock(self) -> None:
@@ -337,7 +337,7 @@ class StateManager:
                         self._pid_file.unlink()
                 except (ValueError, OSError):
                     pass
-        except (OSError, IOError):
+        except OSError:
             pass
 
     def is_session_active(self) -> bool:
@@ -358,7 +358,7 @@ class StateManager:
             # Invalid PID or process not running - clean up stale PID file
             try:
                 self._pid_file.unlink()
-            except (OSError, IOError):
+            except OSError:
                 pass
             return False
 
