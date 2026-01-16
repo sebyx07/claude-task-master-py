@@ -13,6 +13,12 @@ class PRStatus(BaseModel):
     number: int
     ci_state: str  # PENDING, SUCCESS, FAILURE, ERROR
     unresolved_threads: int
+    resolved_threads: int
+    total_threads: int
+    checks_passed: int
+    checks_failed: int
+    checks_pending: int
+    checks_skipped: int
     check_details: list[dict[str, Any]]
 
 
@@ -83,11 +89,17 @@ class GitHubClient:
                       state
                       contexts(first: 50) {
                         nodes {
+                          __typename
                           ... on CheckRun {
                             name
                             status
                             conclusion
                             detailsUrl
+                          }
+                          ... on StatusContext {
+                            context
+                            state
+                            targetUrl
                           }
                         }
                       }
@@ -144,25 +156,61 @@ class GitHubClient:
             if commit["statusCheckRollup"]:
                 ci_state = commit["statusCheckRollup"]["state"]
                 contexts = commit["statusCheckRollup"]["contexts"]["nodes"]
-                check_details = [
-                    {
-                        "name": ctx["name"],
-                        "status": ctx["status"],
-                        "conclusion": ctx.get("conclusion"),
-                        "url": ctx.get("detailsUrl"),
-                    }
-                    for ctx in contexts
-                ]
+                for ctx in contexts:
+                    # Handle both CheckRun and StatusContext types
+                    if ctx.get("__typename") == "CheckRun":
+                        check_details.append(
+                            {
+                                "name": ctx.get("name", "unknown"),
+                                "status": ctx.get("status", "unknown"),
+                                "conclusion": ctx.get("conclusion"),
+                                "url": ctx.get("detailsUrl"),
+                            }
+                        )
+                    elif ctx.get("__typename") == "StatusContext":
+                        # StatusContext uses 'context' for name and 'state' for status
+                        check_details.append(
+                            {
+                                "name": ctx.get("context", "unknown"),
+                                "context": ctx.get("context", "unknown"),
+                                "status": ctx.get("state", "unknown"),
+                                "conclusion": ctx.get(
+                                    "state"
+                                ),  # state is the conclusion for StatusContext
+                                "url": ctx.get("targetUrl"),
+                            }
+                        )
 
-        # Count unresolved review threads
-        unresolved = sum(
-            1 for thread in pr_data["reviewThreads"]["nodes"] if not thread["isResolved"]
+        # Count review threads
+        threads = pr_data["reviewThreads"]["nodes"]
+        total_threads = len(threads)
+        unresolved = sum(1 for thread in threads if not thread["isResolved"])
+        resolved = total_threads - unresolved
+
+        # Count check statuses
+        checks_passed = sum(
+            1 for c in check_details if c.get("conclusion", "").lower() in ("success", "neutral")
         )
+        checks_failed = sum(
+            1
+            for c in check_details
+            if c.get("conclusion", "").lower() in ("failure", "error", "cancelled", "timed_out")
+        )
+        checks_skipped = sum(
+            1 for c in check_details if c.get("conclusion", "").lower() == "skipped"
+        )
+        checks_pending = len(check_details) - checks_passed - checks_failed - checks_skipped
 
         return PRStatus(
             number=pr_number,
             ci_state=ci_state,
             unresolved_threads=unresolved,
+            resolved_threads=resolved,
+            total_threads=total_threads,
+            checks_passed=checks_passed,
+            checks_failed=checks_failed,
+            checks_pending=checks_pending,
+            checks_skipped=checks_skipped,
             check_details=check_details,
         )
 

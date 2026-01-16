@@ -104,12 +104,18 @@ class WorkflowStageHandler:
             pr_status = self.github_client.get_pr_status(state.current_pr)
 
             if pr_status.ci_state == "SUCCESS":
-                console.success("CI passed!")
+                console.success(
+                    f"CI passed! ({pr_status.checks_passed} passed, "
+                    f"{pr_status.checks_skipped} skipped)"
+                )
                 state.workflow_stage = "waiting_reviews"
                 self.state_manager.save_state(state)
                 return None
             elif pr_status.ci_state in ("FAILURE", "ERROR"):
-                console.warning(f"CI failed: {pr_status.ci_state}")
+                console.warning(
+                    f"CI failed: {pr_status.checks_failed} failed, "
+                    f"{pr_status.checks_passed} passed, {pr_status.checks_pending} pending"
+                )
                 for check in pr_status.check_details:
                     if check.get("conclusion") in ("failure", "error"):
                         check_name = self._get_check_name(check)
@@ -118,14 +124,17 @@ class WorkflowStageHandler:
                 self.state_manager.save_state(state)
                 return None
             else:
-                console.info(f"Waiting for CI... (status: {pr_status.ci_state})")
+                console.info(
+                    f"Waiting for CI... ({pr_status.checks_pending} pending, "
+                    f"{pr_status.checks_passed} passed)"
+                )
                 # Show individual check statuses if available
                 for check in pr_status.check_details:
                     status = check.get("status", "unknown")
                     check_name = self._get_check_name(check)
-                    if status == "in_progress":
+                    if status.lower() in ("in_progress", "pending"):
                         console.detail(f"  ⏳ {check_name}: running")
-                    elif status == "queued":
+                    elif status.lower() == "queued":
                         console.detail(f"  ⏸ {check_name}: queued")
                 console.detail(f"Next check in {self.CI_POLL_INTERVAL}s...")
                 if not interruptible_sleep(self.CI_POLL_INTERVAL):
@@ -212,12 +221,18 @@ After fixing, end with: TASK COMPLETE"""
                 return None  # Will re-check on next cycle
 
             if pr_status.unresolved_threads > 0:
-                console.warning(f"Found {pr_status.unresolved_threads} unresolved review comments")
+                console.warning(
+                    f"Found {pr_status.unresolved_threads} unresolved / "
+                    f"{pr_status.total_threads} total review comments"
+                )
                 state.workflow_stage = "addressing_reviews"
                 self.state_manager.save_state(state)
                 return None
             else:
-                console.success("No unresolved reviews!")
+                if pr_status.total_threads > 0:
+                    console.success(f"All {pr_status.resolved_threads} review comments resolved!")
+                else:
+                    console.success("No review comments!")
                 state.workflow_stage = "ready_to_merge"
                 self.state_manager.save_state(state)
                 return None
