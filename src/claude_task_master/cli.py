@@ -232,12 +232,20 @@ def resume(
             console.print("Use 'start' to begin a new task.")
             raise typer.Exit(1)
 
-        # Force reset status if requested
+        # Force reset status if requested - detect real state from GitHub
         if force:
             state = state_manager.load_state()
             if state.status in ("failed", "blocked"):
-                console.print(f"[yellow]Force resetting status from '{state.status}' to 'working'[/yellow]")
-                state.status = "working"
+                console.print(f"[yellow]Force recovery from '{state.status}'...[/yellow]")
+
+                from .core.state_recovery import StateRecovery
+
+                recovery = StateRecovery()
+                recovered = recovery.apply_recovery(state)
+
+                console.print(f"[cyan]{recovered.message}[/cyan]")
+                console.print(f"[dim]Stage: {recovered.workflow_stage}[/dim]")
+
                 state_manager.save_state(state, validate_transition=False)
 
         # Load state and validate it's resumable using comprehensive validation
