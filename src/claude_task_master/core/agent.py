@@ -217,6 +217,7 @@ class ToolConfig(Enum):
         "TodoWrite",
         "WebSearch",
         "WebFetch",
+        "Skill",  # Enable Skills from .claude/skills/
     ]
 
 
@@ -674,7 +675,7 @@ class AgentWrapper:
                     permission_mode="bypassPermissions",  # For MVP, bypass permissions
                     model=model_name,  # Specify the model to use
                     cwd=str(self.working_dir),  # Project directory for CLAUDE.md
-                    setting_sources=["project"],  # Load CLAUDE.md from project directory
+                    setting_sources=["user", "project"],  # Load CLAUDE.md and Skills
                     hooks=self.hooks,  # type: ignore[arg-type]  # Compatible HookMatcher
                 )
             except Exception as e:
