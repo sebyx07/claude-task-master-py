@@ -6,6 +6,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from . import console
+from .prompts import build_planning_prompt, build_work_prompt
 
 if TYPE_CHECKING:
     from .hooks import HookMatcher
@@ -771,189 +772,24 @@ Be strict - only say PASS if ALL criteria are truly met."""
         return model_map.get(target_model, "claude-sonnet-4-5-20250929")
 
     def _build_planning_prompt(self, goal: str, context: str) -> str:
-        """Build prompt for planning phase."""
-        prompt = f"""You are Claude Task Master, an autonomous task orchestration system.
+        """Build prompt for planning phase.
 
-GOAL: {goal}
-
-## Your Mission
-
-You will plan and then autonomously execute a series of tasks to achieve this goal.
-The workflow is: Plan → Work → Push → PR → CI/Review → Fix if needed → Repeat → Success
-
-## Phase 1: Exploration & Understanding
-
-First, thoroughly explore the codebase:
-1. Read relevant files to understand the architecture
-2. Use Glob to find file patterns
-3. Use Grep to search for specific code patterns
-4. Identify dependencies, tests, CI configuration, and coding standards
-
-## Phase 2: Create the Plan
-
-{context}
-
-IMPORTANT SETUP:
-- Add `.claude-task-master/` to .gitignore if not already present
-- This directory stores task state and should not be committed
-
-## Task List Format
-
-Create tasks that are:
-- **Atomic**: Each task should be a single PR-able unit of work
-- **Testable**: Can verify completion (tests pass, lint clean, etc.)
-- **Ordered**: Dependencies first, then dependent tasks
-- **Tagged**: Complexity tag for model routing
-
-Use this EXACT format:
-```markdown
-- [ ] `[coding]` Complex implementation requiring architecture decisions
-- [ ] `[quick]` Simple fix, config change, or typo correction
-- [ ] `[general]` Standard task like tests, docs, or refactoring
-```
-
-**Model Routing:**
-- `[coding]` → **Opus** (smartest): New features, complex logic, debugging, architecture
-- `[quick]` → **Haiku** (fastest): Config, simple edits, renaming, small fixes
-- `[general]` → **Sonnet** (balanced): Tests, docs, refactoring, standard implementations
-
-**When in doubt, use `[coding]`** - better to use a smarter model than struggle.
-
-## PR Strategy
-
-Group related tasks into logical PRs:
-- Each PR should be focused and reviewable
-- Include a task for "Create PR for [feature]" after implementation tasks
-- Consider CI and code review feedback cycles
-
-Example task flow:
-```markdown
-- [ ] `[coding]` Implement feature X core logic
-- [ ] `[general]` Add tests for feature X
-- [ ] `[quick]` Update documentation for feature X
-- [ ] `[general]` Create PR for feature X, wait for CI and reviews
-- [ ] `[coding]` Address PR feedback if any
-```
-
-## Success Criteria
-
-Define 3-5 clear, measurable criteria:
-1. All tests pass (`pytest` or equivalent)
-2. Linting/formatting clean (`ruff`, `mypy`, etc.)
-3. CI pipeline green
-4. PRs merged (if applicable)
-5. Specific functional requirement met
-
-Be specific and verifiable. These will be checked at the end."""
-        return prompt
+        Delegates to centralized prompts module for maintainability.
+        """
+        return build_planning_prompt(goal=goal, context=context if context else None)
 
     def _build_work_prompt(
         self, task_description: str, context: str, pr_comments: str | None
     ) -> str:
-        """Build prompt for work session."""
-        prompt = f"""You are Claude Task Master, an autonomous AI agent executing tasks.
+        """Build prompt for work session.
 
-## Current Task
-
-{task_description}
-
-## Context
-
-{context}"""
-
-        if pr_comments:
-            prompt += f"""
-
-## PR Review Comments to Address
-
-The following feedback was received from code reviewers (CodeRabbit, human reviewers, etc.):
-
-{pr_comments}
-
-**Instructions for addressing reviews:**
-- Read each comment carefully
-- Make the requested changes or explain why not needed
-- Run tests after changes to ensure nothing breaks
-- Commit with a message referencing the review feedback
-"""
-
-        prompt += """
-
-## Execution Guidelines
-
-### 1. Understand Before Acting
-- Read relevant files before modifying them
-- Check existing patterns and coding standards
-- Identify tests that need to pass
-
-### 2. Make Changes
-- Use Edit for existing files, Write for new files
-- Follow the project's coding style
-- Keep changes focused on the current task
-
-### 3. Verify Your Work
-- Run tests: `pytest`, `npm test`, or project-specific commands
-- Run linting: `ruff check .`, `eslint`, etc.
-- Check types if applicable: `mypy`, `tsc`
-
-### 4. Commit Your Changes
-Use conventional commits with clear messages:
-
-```bash
-git add -A && git commit -m "$(cat <<'EOF'
-feat/fix/chore: Brief description (50 chars max)
-
-- Detailed bullet points of what changed
-- Why this change was needed
-- Any relevant context
-
-Co-Authored-By: Claude <noreply@anthropic.com>
-EOF
-)"
-```
-
-### 5. Handle PR Tasks (CRITICAL)
-**You MUST complete the full PR cycle before starting any new feature:**
-
-1. **Create PR** (if not exists):
-   ```bash
-   git push -u origin HEAD
-   gh pr create --title "..." --body "..."
-   ```
-
-2. **Wait for CI to pass**:
-   ```bash
-   gh pr checks --watch  # Wait for all checks
-   ```
-
-3. **Address any review feedback**:
-   - Check for comments: `gh pr view --comments`
-   - Make requested changes, commit, push
-   - Re-run CI checks
-
-4. **MERGE the PR before moving on**:
-   ```bash
-   gh pr merge --squash --delete-branch
-   ```
-
-**IMPORTANT**: Do NOT start work on a new feature while a PR is still open.
-The correct workflow is: Work → PR → CI → Fix if needed → Merge → Next task
-
-### 6. Mark Tasks Complete
-After completing a task and merging any PR:
-- Update plan.md to mark the task as done: `- [x]`
-- Move to the next task only after the current one is fully complete
-
-## Completion Summary
-
-When done, provide:
-1. **What was completed** - specific changes made
-2. **Tests run** - commands and results
-3. **Files modified** - list of changed files
-4. **Git status** - commits made, push status, PR merged?
-5. **Blockers** - any issues encountered"""
-
-        return prompt
+        Delegates to centralized prompts module for maintainability.
+        """
+        return build_work_prompt(
+            task_description=task_description,
+            context=context if context else None,
+            pr_comments=pr_comments,
+        )
 
     def _extract_plan(self, result: str) -> str:
         """Extract task list from planning result."""

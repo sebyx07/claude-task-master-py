@@ -496,9 +496,10 @@ class TestAgentWrapperPromptBuilding:
         """Test _build_planning_prompt includes task list format instructions."""
         prompt = agent._build_planning_prompt("Test goal", "")
 
-        assert "## Task List" in prompt
+        # Uses centralized prompts.py format
+        assert "Create Plan" in prompt  # Phase 2: Create Plan
         assert "- [ ]" in prompt
-        assert "## Success Criteria" in prompt
+        assert "Success Criteria" in prompt
 
     def test_build_planning_prompt_includes_gitignore_instruction(self, agent):
         """Test _build_planning_prompt includes .gitignore instruction."""
@@ -534,14 +535,15 @@ class TestAgentWrapperPromptBuilding:
         pr_comments = "Please add error handling for edge cases."
         prompt = agent._build_work_prompt("Test task", "", pr_comments)
 
-        assert "PR Review Comments" in prompt
+        # Uses centralized prompts.py format
+        assert "PR Review Feedback" in prompt
         assert "Please add error handling for edge cases." in prompt
 
     def test_build_work_prompt_without_pr_comments(self, agent):
         """Test _build_work_prompt without PR comments."""
         prompt = agent._build_work_prompt("Test task", "", None)
 
-        assert "PR Review Comments" not in prompt
+        assert "PR Review Feedback" not in prompt
 
     def test_build_work_prompt_mentions_tools(self, agent):
         """Test _build_work_prompt mentions git and common commands."""
