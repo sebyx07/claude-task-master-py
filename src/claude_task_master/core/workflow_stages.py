@@ -55,16 +55,29 @@ class WorkflowStageHandler:
         self.pr_context = pr_context
 
     def handle_pr_created_stage(self, state: TaskState) -> int | None:
-        """Handle PR creation - check if PR exists or needs creation."""
+        """Handle PR creation - detect PR from current branch."""
         console.info("Checking PR status...")
 
+        # Try to detect PR number from current branch if not already set
         if state.current_pr is None:
-            console.detail("No PR yet - agent will create one if needed")
-            state.workflow_stage = "waiting_ci"
-            self.state_manager.save_state(state)
-            return None
+            try:
+                pr_number = self.github_client.get_pr_for_current_branch()
+                if pr_number:
+                    console.success(f"Detected PR #{pr_number} for current branch")
+                    state.current_pr = pr_number
+                    self.state_manager.save_state(state)
+                else:
+                    console.detail("No PR found for current branch - skipping CI wait")
+                    state.workflow_stage = "merged"  # Skip to next task
+                    self.state_manager.save_state(state)
+                    return None
+            except Exception as e:
+                console.warning(f"Could not detect PR: {e}")
+                state.workflow_stage = "merged"  # Skip to next task
+                self.state_manager.save_state(state)
+                return None
 
-        console.detail(f"PR #{state.current_pr} exists")
+        console.detail(f"PR #{state.current_pr} - moving to CI check")
         state.workflow_stage = "waiting_ci"
         self.state_manager.save_state(state)
         return None

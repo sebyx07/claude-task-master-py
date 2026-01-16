@@ -166,6 +166,21 @@ class GitHubClient:
             check_details=check_details,
         )
 
+    def get_pr_for_current_branch(self) -> int | None:
+        """Get PR number for the current branch, if one exists."""
+        try:
+            result = subprocess.run(
+                ["gh", "pr", "view", "--json", "number"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            data = json.loads(result.stdout)
+            return data.get("number")
+        except subprocess.CalledProcessError:
+            # No PR exists for current branch
+            return None
+
     def get_pr_comments(self, pr_number: int, only_unresolved: bool = True) -> str:
         """Get PR review comments formatted for Claude."""
         # Get repository info
