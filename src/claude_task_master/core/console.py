@@ -62,8 +62,21 @@ def tool(message: str, *, end: str = "\n", flush: bool = False) -> None:
 
 
 def stream(text: str, *, end: str = "", flush: bool = True) -> None:
-    """Print streaming text (no prefix, for Claude's output)."""
+    """Print streaming text (no prefix, for real-time output)."""
     print(text, end=end, flush=flush)
+
+
+def claude_text(message: str, *, end: str = "\n", flush: bool = False) -> None:
+    """Print Claude's text response with [claude] prefix (orange)."""
+    print(f"{_claude_prefix()} {message}", end=end, flush=flush)
+
+
+def tool_result(message: str, *, is_error: bool = False, flush: bool = True) -> None:
+    """Print tool result with [claude] prefix."""
+    if is_error:
+        print(f"{_claude_prefix()} {RED}{message}{RESET}", flush=flush)
+    else:
+        print(f"{_claude_prefix()} {GREEN}{message}{RESET}", flush=flush)
 
 
 def newline() -> None:

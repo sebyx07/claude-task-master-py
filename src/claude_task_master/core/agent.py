@@ -715,8 +715,8 @@ class AgentWrapper:
                 block_type = type(block).__name__
 
                 if block_type == "TextBlock":
-                    # Claude's text response - stream without prefix
-                    console.stream(block.text)
+                    # Claude's text response - show with [claude] prefix
+                    console.claude_text(block.text.strip(), flush=True)
                     result_text += block.text
                 elif block_type == "ToolUseBlock":
                     # Tool being invoked - show details
@@ -728,13 +728,13 @@ class AgentWrapper:
                     if self.logger:
                         self.logger.log_tool_use(block.name, tool_input)
                 elif block_type == "ToolResultBlock":
-                    # Tool result - show completion
+                    # Tool result - show completion with [claude] prefix
                     if block.is_error:
-                        console.error("Tool error", flush=True)
+                        console.tool_result("Tool error", is_error=True)
                         if self.logger:
                             self.logger.log_tool_result(block.tool_use_id, "ERROR")
                     else:
-                        console.success("Tool completed", flush=True)
+                        console.tool_result("Tool completed")
                         if self.logger:
                             self.logger.log_tool_result(block.tool_use_id, "completed")
 
