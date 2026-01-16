@@ -192,19 +192,13 @@ class TaskComplexity(Enum):
 class ToolConfig(Enum):
     """Tool configurations for different phases."""
 
-    # Planning now uses all tools since Claude needs full access to explore and create plans
+    # Planning uses READ-ONLY tools - Claude explores and creates plan, does NOT implement
     PLANNING = [
         "Read",
-        "Write",
-        "Edit",
-        "Bash",
         "Glob",
         "Grep",
-        "Task",
-        "TodoWrite",
-        "WebSearch",
-        "WebFetch",
     ]
+    # Working phase has full tool access for implementation
     WORKING = [
         "Read",
         "Write",

@@ -300,18 +300,11 @@ class TestToolConfig:
     """Tests for ToolConfig enum."""
 
     def test_planning_tools(self):
-        """Test PLANNING tool configuration - planning now has full access."""
+        """Test PLANNING tool configuration - read-only tools for exploration."""
         expected = [
             "Read",
-            "Write",
-            "Edit",
-            "Bash",
             "Glob",
             "Grep",
-            "Task",
-            "TodoWrite",
-            "WebSearch",
-            "WebFetch",
         ]
         assert ToolConfig.PLANNING.value == expected
 
@@ -331,11 +324,12 @@ class TestToolConfig:
         ]
         assert ToolConfig.WORKING.value == expected
 
-    def test_planning_and_working_tools_are_same(self):
-        """Test planning and working phases have same tool access."""
+    def test_planning_has_subset_of_working_tools(self):
+        """Test planning tools are a subset of working tools (read-only)."""
         planning_tools = set(ToolConfig.PLANNING.value)
         working_tools = set(ToolConfig.WORKING.value)
-        assert planning_tools == working_tools
+        assert planning_tools.issubset(working_tools)
+        assert planning_tools != working_tools  # Planning is restricted
 
 
 # =============================================================================
@@ -445,19 +439,12 @@ class TestAgentWrapperGetToolsForPhase:
             )
 
     def test_planning_phase_tools(self, agent):
-        """Test get_tools_for_phase returns planning tools (now full access)."""
+        """Test get_tools_for_phase returns read-only planning tools."""
         tools = agent.get_tools_for_phase("planning")
         expected = [
             "Read",
-            "Write",
-            "Edit",
-            "Bash",
             "Glob",
             "Grep",
-            "Task",
-            "TodoWrite",
-            "WebSearch",
-            "WebFetch",
         ]
         assert tools == expected
 
