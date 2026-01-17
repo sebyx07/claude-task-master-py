@@ -20,6 +20,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from claude_task_master.core.circuit_breaker import CircuitBreakerConfig
 from claude_task_master.core.conversation import (
     DEFAULT_TOOLS,
     MODEL_NAMES,
@@ -30,9 +31,7 @@ from claude_task_master.core.conversation import (
     QueryExecutionError,
     SDKImportError,
 )
-from claude_task_master.core.circuit_breaker import CircuitBreakerConfig
 from claude_task_master.core.rate_limit import RateLimitConfig
-
 
 # =============================================================================
 # Test ConversationError Hierarchy
@@ -129,8 +128,17 @@ class TestModelConstants:
     def test_default_tools(self):
         """Should have expected default tools."""
         expected_tools = [
-            "Read", "Write", "Edit", "Bash", "Glob", "Grep",
-            "Task", "TodoWrite", "WebSearch", "WebFetch", "Skill"
+            "Read",
+            "Write",
+            "Edit",
+            "Bash",
+            "Glob",
+            "Grep",
+            "Task",
+            "TodoWrite",
+            "WebSearch",
+            "WebFetch",
+            "Skill",
         ]
         for tool in expected_tools:
             assert tool in DEFAULT_TOOLS
@@ -228,6 +236,7 @@ class TestSDKImport:
 
         with patch.dict("sys.modules"):
             import sys
+
             # Remove the module if it exists
             if "claude_agent_sdk" in sys.modules:
                 del sys.modules["claude_agent_sdk"]
@@ -296,8 +305,7 @@ class TestCreateOptions:
 
         with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
             with patch(
-                "claude_task_master.core.conversation.get_agents_for_working_dir",
-                return_value=None
+                "claude_task_master.core.conversation.get_agents_for_working_dir", return_value=None
             ):
                 manager._create_options(["Read", "Write"])
 
@@ -318,8 +326,7 @@ class TestCreateOptions:
 
         with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
             with patch(
-                "claude_task_master.core.conversation.get_agents_for_working_dir",
-                return_value=None
+                "claude_task_master.core.conversation.get_agents_for_working_dir", return_value=None
             ):
                 manager._create_options(["Read"], model_override="opus")
 
@@ -340,7 +347,7 @@ class TestCreateOptions:
         with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
             with patch(
                 "claude_task_master.core.conversation.get_agents_for_working_dir",
-                return_value=mock_agents
+                return_value=mock_agents,
             ):
                 manager._create_options(["Read"])
 
@@ -379,8 +386,7 @@ class TestConversationContextManager:
         manager._options_class = MagicMock(return_value=MagicMock())
 
         with patch(
-            "claude_task_master.core.conversation.get_agents_for_working_dir",
-            return_value=None
+            "claude_task_master.core.conversation.get_agents_for_working_dir", return_value=None
         ):
             async with manager.conversation("group-1") as session:
                 assert session.group_id == "group-1"
@@ -398,8 +404,7 @@ class TestConversationContextManager:
         manager._options_class = MagicMock(return_value=MagicMock())
 
         with patch(
-            "claude_task_master.core.conversation.get_agents_for_working_dir",
-            return_value=None
+            "claude_task_master.core.conversation.get_agents_for_working_dir", return_value=None
         ):
             async with manager.conversation("test-group"):
                 assert manager._active_group == "test-group"
@@ -408,6 +413,7 @@ class TestConversationContextManager:
     async def test_conversation_restores_cwd(self, temp_dir, monkeypatch):
         """Should restore original working directory."""
         import os
+
         original_cwd = os.getcwd()
 
         manager = ConversationManager(working_dir=str(temp_dir))
@@ -417,8 +423,7 @@ class TestConversationContextManager:
         manager._options_class = MagicMock(return_value=MagicMock())
 
         with patch(
-            "claude_task_master.core.conversation.get_agents_for_working_dir",
-            return_value=None
+            "claude_task_master.core.conversation.get_agents_for_working_dir", return_value=None
         ):
             async with manager.conversation("group-1"):
                 pass
@@ -435,8 +440,7 @@ class TestConversationContextManager:
         manager._options_class = MagicMock(return_value=MagicMock())
 
         with patch(
-            "claude_task_master.core.conversation.get_agents_for_working_dir",
-            return_value=None
+            "claude_task_master.core.conversation.get_agents_for_working_dir", return_value=None
         ):
             try:
                 async with manager.conversation("group-1"):
@@ -457,8 +461,7 @@ class TestConversationContextManager:
         manager._options_class = MagicMock(return_value=MagicMock())
 
         with patch(
-            "claude_task_master.core.conversation.get_agents_for_working_dir",
-            return_value=None
+            "claude_task_master.core.conversation.get_agents_for_working_dir", return_value=None
         ):
             with patch("claude_task_master.core.conversation.console"):
                 # Should not raise
@@ -517,11 +520,7 @@ class TestConversationSessionInit:
         manager = ConversationManager(working_dir=str(temp_dir))
         mock_client = MagicMock()
 
-        session = ConversationSession(
-            client=mock_client,
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=mock_client, manager=manager, group_id="test-group")
 
         assert session.client is mock_client
         assert session.manager is manager
@@ -531,11 +530,7 @@ class TestConversationSessionInit:
     def test_query_count_property(self, temp_dir):
         """Should return query count."""
         manager = ConversationManager(working_dir=str(temp_dir))
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         assert session.query_count == 0
         session._query_count = 5
@@ -568,11 +563,7 @@ class TestQueryTask:
             return_value=AsyncIteratorMock([mock_result_message])
         )
 
-        session = ConversationSession(
-            client=mock_client,
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=mock_client, manager=manager, group_id="test-group")
 
         with patch("claude_task_master.core.conversation.console"):
             result = await session.query_task("Do something")
@@ -589,22 +580,14 @@ class TestQueryTask:
         mock_client.query = AsyncMock()
 
         # receive_response returns an async iterator directly (not a coroutine)
-        mock_client.receive_response = MagicMock(
-            return_value=AsyncIteratorMock([])
-        )
+        mock_client.receive_response = MagicMock(return_value=AsyncIteratorMock([]))
 
-        session = ConversationSession(
-            client=mock_client,
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=mock_client, manager=manager, group_id="test-group")
 
         with patch("claude_task_master.core.conversation.console"):
             await session.query_task("Query 1")
             # Reset the mock for second call
-            mock_client.receive_response = MagicMock(
-                return_value=AsyncIteratorMock([])
-            )
+            mock_client.receive_response = MagicMock(return_value=AsyncIteratorMock([]))
             await session.query_task("Query 2")
 
         assert session._query_count == 2
@@ -616,11 +599,7 @@ class TestQueryTask:
         mock_client = AsyncMock()
         mock_client.query.side_effect = RuntimeError("Connection failed")
 
-        session = ConversationSession(
-            client=mock_client,
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=mock_client, manager=manager, group_id="test-group")
 
         with patch("claude_task_master.core.conversation.console"):
             with pytest.raises(QueryExecutionError) as exc_info:
@@ -640,11 +619,7 @@ class TestProcessMessage:
     def test_process_text_block(self, temp_dir):
         """Should process TextBlock content."""
         manager = ConversationManager(working_dir=str(temp_dir))
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         text_block = MagicMock()
         text_block.__class__.__name__ = "TextBlock"
@@ -663,11 +638,7 @@ class TestProcessMessage:
         """Should process ToolUseBlock content."""
         mock_logger = MagicMock()
         manager = ConversationManager(working_dir=str(temp_dir), logger=mock_logger)
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         tool_block = MagicMock()
         tool_block.__class__.__name__ = "ToolUseBlock"
@@ -687,11 +658,7 @@ class TestProcessMessage:
         """Should process successful ToolResultBlock."""
         mock_logger = MagicMock()
         manager = ConversationManager(working_dir=str(temp_dir), logger=mock_logger)
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         result_block = MagicMock()
         result_block.__class__.__name__ = "ToolResultBlock"
@@ -712,11 +679,7 @@ class TestProcessMessage:
         """Should process error ToolResultBlock."""
         mock_logger = MagicMock()
         manager = ConversationManager(working_dir=str(temp_dir), logger=mock_logger)
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         result_block = MagicMock()
         result_block.__class__.__name__ = "ToolResultBlock"
@@ -735,11 +698,7 @@ class TestProcessMessage:
     def test_process_result_message(self, temp_dir):
         """Should extract result from ResultMessage."""
         manager = ConversationManager(working_dir=str(temp_dir))
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         message = MagicMock()
         message.__class__.__name__ = "ResultMessage"
@@ -764,11 +723,7 @@ class TestFormatToolDetail:
     def session(self, temp_dir):
         """Create a session for testing."""
         manager = ConversationManager(working_dir=str(temp_dir))
-        return ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        return ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
     def test_format_bash_tool(self, session):
         """Should format Bash tool details."""
@@ -832,11 +787,7 @@ class TestFormatToolResultSummary:
     def test_summary_returns_empty_when_not_verbose(self, temp_dir):
         """Should return empty string when not verbose."""
         manager = ConversationManager(working_dir=str(temp_dir), verbose=False)
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         block = MagicMock()
         block.content = "Some content"
@@ -847,11 +798,7 @@ class TestFormatToolResultSummary:
     def test_summary_returns_empty_for_no_content(self, temp_dir):
         """Should return empty string when no content."""
         manager = ConversationManager(working_dir=str(temp_dir), verbose=True)
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         block = MagicMock()
         block.content = None
@@ -862,11 +809,7 @@ class TestFormatToolResultSummary:
     def test_summary_handles_string_content(self, temp_dir):
         """Should handle string content."""
         manager = ConversationManager(working_dir=str(temp_dir), verbose=True)
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         block = MagicMock()
         block.content = "Line 1\nLine 2\nLine 3"
@@ -877,11 +820,7 @@ class TestFormatToolResultSummary:
     def test_summary_handles_list_content_with_text(self, temp_dir):
         """Should handle list content with text attribute."""
         manager = ConversationManager(working_dir=str(temp_dir), verbose=True)
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         item = MagicMock()
         item.text = "Test text"
@@ -894,11 +833,7 @@ class TestFormatToolResultSummary:
     def test_summary_handles_list_content_strings(self, temp_dir):
         """Should handle list content with strings."""
         manager = ConversationManager(working_dir=str(temp_dir), verbose=True)
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         block = MagicMock()
         block.content = ["String content"]
@@ -909,11 +844,7 @@ class TestFormatToolResultSummary:
     def test_summary_detects_edit_summary(self, temp_dir):
         """Should detect and return edit summary lines."""
         manager = ConversationManager(working_dir=str(temp_dir), verbose=True)
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         block = MagicMock()
         block.content = "Some prefix\nAdded 5 lines to file.py\nMore content"
@@ -924,11 +855,7 @@ class TestFormatToolResultSummary:
     def test_summary_shows_last_lines(self, temp_dir):
         """Should show last few lines for long output."""
         manager = ConversationManager(working_dir=str(temp_dir), verbose=True)
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         lines = [f"Line {i}" for i in range(10)]
         block = MagicMock()
@@ -943,11 +870,7 @@ class TestFormatToolResultSummary:
     def test_summary_truncates_long_lines(self, temp_dir):
         """Should truncate very long lines."""
         manager = ConversationManager(working_dir=str(temp_dir), verbose=True)
-        session = ConversationSession(
-            client=MagicMock(),
-            manager=manager,
-            group_id="test-group"
-        )
+        session = ConversationSession(client=MagicMock(), manager=manager, group_id="test-group")
 
         long_line = "x" * 200
         block = MagicMock()

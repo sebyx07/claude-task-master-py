@@ -33,7 +33,6 @@ from claude_task_master.core.state_exceptions import (
     StateValidationError,
 )
 
-
 # =============================================================================
 # Constants Tests
 # =============================================================================
@@ -705,15 +704,15 @@ class TestExceptionHierarchy:
                 raise exc
             except StateError:
                 pass  # Should be caught
-            except Exception:
-                raise AssertionError(f"{type(exc).__name__} not caught as StateError")
+            except Exception as e:
+                raise AssertionError(f"{type(exc).__name__} not caught as StateError") from e
 
     def test_specific_exceptions_not_caught_by_sibling(self):
         """Test that specific exceptions are not caught by sibling types."""
         try:
             raise StateNotFoundError(Path("/test"))
-        except StateCorruptedError:
-            raise AssertionError("StateNotFoundError wrongly caught as StateCorruptedError")
+        except StateCorruptedError as e:
+            raise AssertionError("StateNotFoundError wrongly caught as StateCorruptedError") from e
         except StateNotFoundError:
             pass  # Correct
 

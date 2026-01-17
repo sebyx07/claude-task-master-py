@@ -57,11 +57,7 @@ def pr_context_manager(
 
 def make_graphql_response(threads: list[dict[str, Any]]) -> dict[str, Any]:
     """Helper to create GraphQL response structure."""
-    return {
-        "data": {
-            "repository": {"pullRequest": {"reviewThreads": {"nodes": threads}}}
-        }
-    }
+    return {"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": threads}}}}}
 
 
 # =============================================================================
@@ -210,9 +206,7 @@ class TestSaveCIFailures:
 class TestSavePRComments:
     """Tests for save_pr_comments method."""
 
-    def test_returns_early_for_none_pr(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_returns_early_for_none_pr(self, pr_context_manager: PRContextManager) -> None:
         """Test that save_pr_comments returns early when pr_number is None."""
         with patch("subprocess.run") as mock_run:
             pr_context_manager.save_pr_comments(None)
@@ -423,9 +417,7 @@ class TestSavePRComments:
 class TestPostCommentReplies:
     """Tests for post_comment_replies method."""
 
-    def test_returns_early_for_none_pr(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_returns_early_for_none_pr(self, pr_context_manager: PRContextManager) -> None:
         """Test that post_comment_replies returns early when pr_number is None."""
         with patch("subprocess.run") as mock_run:
             pr_context_manager.post_comment_replies(None)
@@ -484,9 +476,7 @@ class TestPostCommentReplies:
             # Second call: get resolved threads (graphql)
             # Third call: post reply
             # Fourth call: resolve thread
-            mock_run.return_value = MagicMock(
-                stdout=json.dumps(make_graphql_response([]))
-            )
+            mock_run.return_value = MagicMock(stdout=json.dumps(make_graphql_response([])))
 
             with patch("claude_task_master.core.pr_context.console"):
                 pr_context_manager.post_comment_replies(123)
@@ -529,9 +519,7 @@ class TestPostCommentReplies:
             with patch("claude_task_master.core.pr_context.console") as mock_console:
                 pr_context_manager.post_comment_replies(123)
                 # Should log that thread is already resolved
-                assert any(
-                    "already resolved" in str(c) for c in mock_console.detail.call_args_list
-                )
+                assert any("already resolved" in str(c) for c in mock_console.detail.call_args_list)
 
     def test_resolves_thread_on_fixed_action(
         self,
@@ -556,9 +544,7 @@ class TestPostCommentReplies:
         )
 
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                stdout=json.dumps(make_graphql_response([]))
-            )
+            mock_run.return_value = MagicMock(stdout=json.dumps(make_graphql_response([])))
 
             with patch("claude_task_master.core.pr_context.console"):
                 pr_context_manager.post_comment_replies(123)
@@ -590,9 +576,7 @@ class TestPostCommentReplies:
         )
 
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                stdout=json.dumps(make_graphql_response([]))
-            )
+            mock_run.return_value = MagicMock(stdout=json.dumps(make_graphql_response([])))
 
             with patch("claude_task_master.core.pr_context.console"):
                 pr_context_manager.post_comment_replies(123)
@@ -624,9 +608,7 @@ class TestPostCommentReplies:
         )
 
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                stdout=json.dumps(make_graphql_response([]))
-            )
+            mock_run.return_value = MagicMock(stdout=json.dumps(make_graphql_response([])))
 
             with patch("claude_task_master.core.pr_context.console"):
                 pr_context_manager.post_comment_replies(123)
@@ -681,9 +663,7 @@ class TestPostCommentReplies:
 class TestPostThreadReply:
     """Tests for _post_thread_reply method."""
 
-    def test_posts_reply_via_graphql(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_posts_reply_via_graphql(self, pr_context_manager: PRContextManager) -> None:
         """Test that reply is posted via GraphQL mutation."""
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock()
@@ -700,9 +680,7 @@ class TestPostThreadReply:
         assert any("mutation" in str(a) for a in args)
         assert any("thread_id_123" in str(a) for a in args)
 
-    def test_raises_on_subprocess_error(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_raises_on_subprocess_error(self, pr_context_manager: PRContextManager) -> None:
         """Test that subprocess errors are raised."""
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.CalledProcessError(1, "gh")
@@ -719,9 +697,7 @@ class TestPostThreadReply:
 class TestResolveThread:
     """Tests for resolve_thread method."""
 
-    def test_resolves_thread_via_graphql(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_resolves_thread_via_graphql(self, pr_context_manager: PRContextManager) -> None:
         """Test that thread is resolved via GraphQL mutation."""
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock()
@@ -738,9 +714,7 @@ class TestResolveThread:
         assert any("resolveReviewThread" in str(a) for a in args)
         assert any("thread_to_resolve" in str(a) for a in args)
 
-    def test_raises_on_subprocess_error(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_raises_on_subprocess_error(self, pr_context_manager: PRContextManager) -> None:
         """Test that subprocess errors are raised."""
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.CalledProcessError(1, "gh")
@@ -757,9 +731,7 @@ class TestResolveThread:
 class TestGetResolvedThreadIds:
     """Tests for _get_resolved_thread_ids method."""
 
-    def test_returns_resolved_thread_ids(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_returns_resolved_thread_ids(self, pr_context_manager: PRContextManager) -> None:
         """Test that resolved thread IDs are returned."""
         graphql_response = make_graphql_response(
             [
@@ -780,9 +752,7 @@ class TestGetResolvedThreadIds:
         assert result == {"thread_1", "thread_3"}
         assert "thread_2" not in result
 
-    def test_returns_empty_on_error(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_returns_empty_on_error(self, pr_context_manager: PRContextManager) -> None:
         """Test that empty set is returned on error."""
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.CalledProcessError(1, "gh")
@@ -792,9 +762,7 @@ class TestGetResolvedThreadIds:
 
         assert result == set()
 
-    def test_returns_empty_for_no_threads(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_returns_empty_for_no_threads(self, pr_context_manager: PRContextManager) -> None:
         """Test that empty set is returned when no threads exist."""
         graphql_response = make_graphql_response([])
 
@@ -817,17 +785,13 @@ class TestGetResolvedThreadIds:
 class TestIsNonActionableComment:
     """Tests for _is_non_actionable_comment method."""
 
-    def test_short_comments_are_non_actionable(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_short_comments_are_non_actionable(self, pr_context_manager: PRContextManager) -> None:
         """Test that very short comments are non-actionable."""
         assert pr_context_manager._is_non_actionable_comment("user", "LGTM")
         assert pr_context_manager._is_non_actionable_comment("user", "Thanks!")
         assert pr_context_manager._is_non_actionable_comment("user", "   ")
 
-    def test_regular_comments_are_actionable(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_regular_comments_are_actionable(self, pr_context_manager: PRContextManager) -> None:
         """Test that regular review comments are actionable."""
         body = "Please fix the error handling in this function"
         assert not pr_context_manager._is_non_actionable_comment("reviewer", body)
@@ -873,16 +837,12 @@ class TestIsNonActionableComment:
         body = "Currently processing your workflow"
         assert pr_context_manager._is_non_actionable_comment("github-actions", body)
 
-    def test_dependabot_status_non_actionable(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_dependabot_status_non_actionable(self, pr_context_manager: PRContextManager) -> None:
         """Test that Dependabot status comments are non-actionable."""
         body = "Review in progress for this update"
         assert pr_context_manager._is_non_actionable_comment("dependabot", body)
 
-    def test_case_insensitive_bot_matching(
-        self, pr_context_manager: PRContextManager
-    ) -> None:
+    def test_case_insensitive_bot_matching(self, pr_context_manager: PRContextManager) -> None:
         """Test that bot matching is case insensitive."""
         body = "Currently processing..."
         assert pr_context_manager._is_non_actionable_comment("CodeRabbitAI", body)
@@ -1028,9 +988,7 @@ class TestPRContextIntegration:
 
         # Step 3: Post replies
         with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                stdout=json.dumps(make_graphql_response([]))
-            )
+            mock_run.return_value = MagicMock(stdout=json.dumps(make_graphql_response([])))
 
             with patch("claude_task_master.core.pr_context.console"):
                 pr_context_manager.post_comment_replies(123)
