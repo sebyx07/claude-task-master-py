@@ -6,8 +6,6 @@ This module tests the prompts from prompts_working.py:
 - _build_commit_only_execution: Commit-only workflow (more tasks in group)
 """
 
-import pytest
-
 from claude_task_master.core.prompts_working import (
     _build_commit_only_execution,
     _build_full_workflow_execution,
@@ -753,11 +751,16 @@ class TestFunctionSignature:
 
     def test_task_description_is_required(self) -> None:
         """Test task_description parameter is required."""
+        import inspect
+
         result = build_work_prompt("Task")
         assert isinstance(result, str)
 
-        with pytest.raises(TypeError):
-            build_work_prompt()  # type: ignore[call-arg]
+        # Verify parameter is required (has no default value)
+        sig = inspect.signature(build_work_prompt)
+        params = sig.parameters
+        assert "task_description" in params
+        assert params["task_description"].default is inspect.Parameter.empty
 
     def test_context_is_optional(self) -> None:
         """Test context parameter is optional."""

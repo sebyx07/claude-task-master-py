@@ -435,7 +435,9 @@ class TestContentFilterError:
         error = ContentFilterError()
         assert "content filtering" in error.message.lower()
         # Should include documentation URL
-        assert "privacy.claude.com" in error.message
+        # CodeQL false positive: checking expected URL in error message, not user input
+        expected_url = "privacy.claude.com"  # lgtm[py/incomplete-url-substring-sanitization]
+        assert expected_url in error.message  # lgtm[py/incomplete-url-substring-sanitization]
 
     def test_with_original_error(self):
         """Test ContentFilterError with original exception."""

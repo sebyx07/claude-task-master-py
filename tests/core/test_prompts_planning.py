@@ -10,8 +10,6 @@ This module tests the build_planning_prompt function from prompts_planning.py:
 - Stop instructions
 """
 
-import pytest
-
 from claude_task_master.core.prompts_planning import build_planning_prompt
 
 # =============================================================================
@@ -715,13 +713,17 @@ class TestFunctionSignature:
 
     def test_goal_is_required(self) -> None:
         """Test goal parameter is required."""
+        import inspect
+
         # Should work with goal
         result = build_planning_prompt("Goal")
         assert isinstance(result, str)
 
-        # Should raise without goal
-        with pytest.raises(TypeError):
-            build_planning_prompt()  # type: ignore[call-arg]
+        # Verify parameter is required (has no default value)
+        sig = inspect.signature(build_planning_prompt)
+        params = sig.parameters
+        assert "goal" in params
+        assert params["goal"].default is inspect.Parameter.empty
 
     def test_context_is_optional(self) -> None:
         """Test context parameter is optional."""

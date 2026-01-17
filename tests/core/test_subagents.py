@@ -652,7 +652,7 @@ class TestDetectProjectConfig:
         (agents_dir / "test.md").write_text("---\nname: test\n---\nPrompt")
 
         with patch("claude_task_master.core.subagents.console") as mock_console:
-            result = detect_project_config(str(temp_working_dir))
+            detect_project_config(str(temp_working_dir))
 
         # Should have logged about agents
         assert any("agent" in str(call).lower() for call in mock_console.info.call_args_list)

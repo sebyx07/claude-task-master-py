@@ -7,8 +7,6 @@ This module tests the prompts from prompts_verification.py:
 - build_error_recovery_prompt: Error recovery prompt
 """
 
-import pytest
-
 from claude_task_master.core.prompts_verification import (
     build_context_extraction_prompt,
     build_error_recovery_prompt,
@@ -737,11 +735,16 @@ class TestVerificationPromptSignature:
 
     def test_criteria_is_required(self) -> None:
         """Test criteria parameter is required."""
+        import inspect
+
         result = build_verification_prompt("Criteria")
         assert isinstance(result, str)
 
-        with pytest.raises(TypeError):
-            build_verification_prompt()  # type: ignore[call-arg]
+        # Verify parameter is required (has no default value)
+        sig = inspect.signature(build_verification_prompt)
+        params = sig.parameters
+        assert "criteria" in params
+        assert params["criteria"].default is inspect.Parameter.empty
 
     def test_tasks_summary_is_optional(self) -> None:
         """Test tasks_summary parameter is optional."""
@@ -762,14 +765,18 @@ class TestTaskCompletionCheckPromptSignature:
 
     def test_both_params_required(self) -> None:
         """Test both parameters are required."""
+        import inspect
+
         result = build_task_completion_check_prompt("Task", "Output")
         assert isinstance(result, str)
 
-        with pytest.raises(TypeError):
-            build_task_completion_check_prompt("Task")  # type: ignore[call-arg]
-
-        with pytest.raises(TypeError):
-            build_task_completion_check_prompt()  # type: ignore[call-arg]
+        # Verify both parameters are required (have no default values)
+        sig = inspect.signature(build_task_completion_check_prompt)
+        params = sig.parameters
+        assert "task_description" in params
+        assert params["task_description"].default is inspect.Parameter.empty
+        assert "session_output" in params
+        assert params["session_output"].default is inspect.Parameter.empty
 
     def test_keyword_args(self) -> None:
         """Test keyword arguments work."""
@@ -785,11 +792,16 @@ class TestContextExtractionPromptSignature:
 
     def test_session_output_required(self) -> None:
         """Test session_output parameter is required."""
+        import inspect
+
         result = build_context_extraction_prompt("Output")
         assert isinstance(result, str)
 
-        with pytest.raises(TypeError):
-            build_context_extraction_prompt()  # type: ignore[call-arg]
+        # Verify parameter is required (has no default value)
+        sig = inspect.signature(build_context_extraction_prompt)
+        params = sig.parameters
+        assert "session_output" in params
+        assert params["session_output"].default is inspect.Parameter.empty
 
     def test_existing_context_optional(self) -> None:
         """Test existing_context parameter is optional."""
@@ -813,11 +825,16 @@ class TestErrorRecoveryPromptSignature:
 
     def test_error_message_required(self) -> None:
         """Test error_message parameter is required."""
+        import inspect
+
         result = build_error_recovery_prompt("Error")
         assert isinstance(result, str)
 
-        with pytest.raises(TypeError):
-            build_error_recovery_prompt()  # type: ignore[call-arg]
+        # Verify parameter is required (has no default value)
+        sig = inspect.signature(build_error_recovery_prompt)
+        params = sig.parameters
+        assert "error_message" in params
+        assert params["error_message"].default is inspect.Parameter.empty
 
     def test_task_context_optional(self) -> None:
         """Test task_context parameter is optional."""
