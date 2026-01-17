@@ -13,6 +13,9 @@ from typing import IO, Literal
 
 from pydantic import BaseModel, ValidationError
 
+# Import backup/recovery mixin
+from claude_task_master.core.state_backup import BackupRecoveryMixin
+
 # Import exceptions and state constants from dedicated module
 from claude_task_master.core.state_exceptions import (
     RESUMABLE_STATUSES,
@@ -59,6 +62,7 @@ __all__ = [
     "StateManager",
     "PRContextMixin",
     "FileOperationsMixin",
+    "BackupRecoveryMixin",
     # Functions
     "file_lock",
 ]
@@ -169,11 +173,12 @@ def file_lock(
 # =============================================================================
 
 
-class StateManager(PRContextMixin, FileOperationsMixin):
+class StateManager(PRContextMixin, FileOperationsMixin, BackupRecoveryMixin):
     """Manages all state persistence.
 
     Inherits PR context methods from PRContextMixin.
     Inherits file operations methods from FileOperationsMixin.
+    Inherits backup/recovery methods from BackupRecoveryMixin.
     """
 
     STATE_DIR = Path(".claude-task-master")
@@ -444,68 +449,8 @@ class StateManager(PRContextMixin, FileOperationsMixin):
                 pass
             raise
 
-    def _attempt_recovery(self, original_error: Exception) -> TaskState | None:
-        """Attempt to recover state from backup.
-
-        Args:
-            original_error: The error that triggered recovery.
-
-        Returns:
-            TaskState if recovery successful, None otherwise.
-        """
-        # First, create a backup of the corrupted file
-        if self.state_file.exists():
-            self._create_backup(self.state_file, suffix=".corrupted")
-
-        # Try to recover from backup
-        if self.backup_dir.exists():
-            # Get the most recent backup
-            backups = sorted(
-                self.backup_dir.glob("state.*.json"), key=lambda p: p.stat().st_mtime, reverse=True
-            )
-            for backup_file in backups:
-                try:
-                    with open(backup_file) as f:
-                        data = json.load(f)
-                    state = TaskState(**data)
-                    # Restore from backup
-                    self._atomic_write_json(self.state_file, data)
-                    return state
-                except (json.JSONDecodeError, ValidationError):
-                    continue
-
-        return None
-
-    def _create_backup(self, file_path: Path, suffix: str = "") -> Path | None:
-        """Create a backup of a file.
-
-        Args:
-            file_path: The file to backup.
-            suffix: Optional suffix to add to backup name.
-
-        Returns:
-            Path to the backup file, or None if backup failed.
-        """
-        if not file_path.exists():
-            return None
-
-        try:
-            self.backup_dir.mkdir(parents=True, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            backup_name = f"{file_path.stem}.{timestamp}{suffix}{file_path.suffix}"
-            backup_path = self.backup_dir / backup_name
-            shutil.copy2(file_path, backup_path)
-            return backup_path
-        except Exception:
-            return None
-
-    def create_state_backup(self) -> Path | None:
-        """Create a backup of the current state file.
-
-        Returns:
-            Path to the backup file, or None if backup failed.
-        """
-        return self._create_backup(self.state_file)
+    # Backup/recovery methods (_attempt_recovery, _create_backup, create_state_backup,
+    # cleanup_on_success, _cleanup_old_logs) are inherited from BackupRecoveryMixin
 
     # File operations methods (save_goal, load_goal, save_criteria, load_criteria,
     # save_plan, load_plan, save_progress, load_progress, save_context, load_context)
@@ -618,35 +563,6 @@ class StateManager(PRContextMixin, FileOperationsMixin):
 
     # _parse_plan_tasks is inherited from FileOperationsMixin
 
-    def cleanup_on_success(self, run_id: str) -> None:
-        """Clean up all state files except logs on success."""
-        # Release session lock first
-        self.release_session_lock()
-
-        # Delete all files in state directory except logs/
-        for item in self.state_dir.iterdir():
-            if item.is_file():
-                item.unlink()
-            elif item.is_dir() and item != self.logs_dir:
-                shutil.rmtree(item)
-
-        # Keep only the last 10 log files
-        self._cleanup_old_logs(max_logs=10)
-
-    def _cleanup_old_logs(self, max_logs: int = 10) -> None:
-        """Keep only the most recent log files."""
-        if not self.logs_dir.exists():
-            return
-
-        # Get all log files sorted by modification time (newest first)
-        log_files = sorted(
-            self.logs_dir.glob("run-*.txt"), key=lambda p: p.stat().st_mtime, reverse=True
-        )
-
-        # Delete older logs
-        for log_file in log_files[max_logs:]:
-            log_file.unlink()
-
     # PR Context Methods are inherited from PRContextMixin:
     # - get_pr_dir(pr_number: int) -> Path
     # - save_pr_comments(pr_number: int, comments: list[dict]) -> None
@@ -666,3 +582,10 @@ class StateManager(PRContextMixin, FileOperationsMixin):
     # - save_context(context: str) -> None
     # - load_context() -> str
     # - _parse_plan_tasks(plan: str) -> list[str]
+
+    # Backup/Recovery Methods are inherited from BackupRecoveryMixin:
+    # - _attempt_recovery(original_error: Exception) -> TaskState | None
+    # - _create_backup(file_path: Path, suffix: str = "") -> Path | None
+    # - create_state_backup() -> Path | None
+    # - cleanup_on_success(run_id: str) -> None
+    # - _cleanup_old_logs(max_logs: int = 10) -> None
