@@ -106,6 +106,14 @@ mypy .                    # Type check
 - Mark complete with `_mark_task_complete()`
 - Increment `current_task_index` and save state
 
+### Work Completion Requirements
+**A task is NOT complete until:**
+1. Changes are committed with descriptive message
+2. Branch is pushed to remote (`git push -u origin HEAD`)
+3. PR is created (`gh pr create ...`)
+
+The work prompt enforces this - agents must report both commit hash AND PR URL.
+
 ### CLI Commands
 All commands check `state_manager.exists()` first:
 - `start`: Initialize and run planning → work loop
