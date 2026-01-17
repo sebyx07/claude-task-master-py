@@ -774,10 +774,19 @@ def patch_github_client_globally(mock_github_client):
     """Globally patch GitHubClient for all integration tests.
 
     This prevents any test from calling the real `gh` CLI which can hang.
+    We need to patch multiple locations since GitHubClient is imported in various ways:
+    - claude_task_master.github.GitHubClient (re-exported from __init__.py)
+    - claude_task_master.github.client.GitHubClient (original definition)
     """
-    with patch(
-        "claude_task_master.github.client.GitHubClient",
-        return_value=mock_github_client,
+    with (
+        patch(
+            "claude_task_master.github.GitHubClient",
+            return_value=mock_github_client,
+        ),
+        patch(
+            "claude_task_master.github.client.GitHubClient",
+            return_value=mock_github_client,
+        ),
     ):
         yield
 
