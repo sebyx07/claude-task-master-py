@@ -769,6 +769,19 @@ def mock_github_client():
     return mock
 
 
+@pytest.fixture(autouse=True)
+def patch_github_client_globally(mock_github_client):
+    """Globally patch GitHubClient for all integration tests.
+
+    This prevents any test from calling the real `gh` CLI which can hang.
+    """
+    with patch(
+        "claude_task_master.github.client.GitHubClient",
+        return_value=mock_github_client,
+    ):
+        yield
+
+
 @pytest.fixture
 def mock_agent_wrapper(mock_sdk: MockClaudeAgentSDK):
     """Provide a mock AgentWrapper for integration tests."""

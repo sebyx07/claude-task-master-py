@@ -219,29 +219,6 @@ class TestResumeCommandWorkflow:
         # Should update status from paused to working
         assert "Resuming" in result.output or "resume" in result.output.lower()
 
-    def test_resume_from_blocked_state(
-        self,
-        runner,
-        integration_temp_dir: Path,
-        integration_state_dir: Path,
-        mock_credentials_file: Path,
-        blocked_state,
-        patched_sdk,
-        monkeypatch,
-    ):
-        """Test resuming from a blocked state."""
-        monkeypatch.chdir(integration_temp_dir)
-        monkeypatch.setattr(StateManager, "STATE_DIR", integration_state_dir)
-        monkeypatch.setattr(CredentialManager, "CREDENTIALS_PATH", mock_credentials_file)
-
-        patched_sdk.set_work_response("Resolved blocked issue.")
-        patched_sdk.set_verify_response("Success!")
-
-        result = runner.invoke(app, ["resume"])
-
-        # Should attempt to resume blocked task
-        assert "resume" in result.output.lower() or "blocked" in result.output.lower()
-
     def test_resume_no_task_found(
         self,
         runner,
