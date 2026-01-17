@@ -166,6 +166,7 @@ class TestGitHubClientInit:
             assert "gh CLI not installed" in error_msg
             # Check that the GitHub CLI URL is mentioned (using regex for proper URL validation)
             import re
+
             assert re.search(r"https://cli\.github\.com/?", error_msg), (
                 f"Expected GitHub CLI URL in error message: {error_msg}"
             )
