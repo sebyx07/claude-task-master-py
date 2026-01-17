@@ -263,9 +263,7 @@ def _truncate_log_output(output: str, max_lines: int) -> str:
     return output
 
 
-def _check_pr_ci_status(
-    client: GitHubClientProtocol, pr_number: int
-) -> tuple[bool, str, bool]:
+def _check_pr_ci_status(client: GitHubClientProtocol, pr_number: int) -> tuple[bool, str, bool]:
     """Check CI status for a PR.
 
     Args:
