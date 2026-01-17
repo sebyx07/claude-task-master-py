@@ -497,7 +497,7 @@ def health_check(
             state_manager.load_state()
             active_tasks = 1
         except Exception:
-            pass
+            pass  # State exists but couldn't be loaded - treat as no active task
 
     return HealthCheckResult(
         status="healthy",

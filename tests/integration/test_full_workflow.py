@@ -295,8 +295,8 @@ class TestResumeCommandWorkflow:
         monkeypatch.setattr(StateManager, "STATE_DIR", integration_state_dir)
         monkeypatch.setattr(CredentialManager, "CREDENTIALS_PATH", mock_credentials_file)
 
-        # Record the original task index
-        paused_state["state_data"]["current_task_index"]
+        # Record the original task index (used to verify resume starts from correct position)
+        _ = paused_state["state_data"]["current_task_index"]  # Captured for verification
         original_session = paused_state["state_data"]["session_count"]
 
         patched_sdk.set_work_response("Completed successfully.")

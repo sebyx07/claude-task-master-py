@@ -162,8 +162,14 @@ class TestGitHubClientInit:
             mock_run.side_effect = FileNotFoundError("gh not found")
             with pytest.raises(GitHubNotFoundError) as exc_info:
                 GitHubClient()
-            assert "gh CLI not installed" in str(exc_info.value)
-            assert "https://cli.github.com/" in str(exc_info.value)
+            error_msg = str(exc_info.value)
+            assert "gh CLI not installed" in error_msg
+            # Check that the GitHub CLI URL is mentioned (using regex for proper URL validation)
+            import re
+
+            assert re.search(r"https://cli\.github\.com/?", error_msg), (
+                f"Expected GitHub CLI URL in error message: {error_msg}"
+            )
 
     def test_init_gh_cli_timeout(self):
         """Test initialization when gh auth check times out."""

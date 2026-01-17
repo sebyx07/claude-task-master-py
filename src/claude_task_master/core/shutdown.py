@@ -100,7 +100,7 @@ class ShutdownManager:
                     if handler is not None:
                         signal.signal(sig, handler)
                 except (ValueError, OSError):
-                    pass
+                    pass  # Ignore errors restoring handlers (e.g., not in main thread)
 
             self._original_handlers.clear()
             self._initialized = False

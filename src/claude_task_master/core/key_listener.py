@@ -116,7 +116,7 @@ class KeyListener:
                         self._on_escape()
                     return True
         except Exception:
-            pass
+            pass  # Silently handle I/O errors (e.g., stdin closed, interrupted)
         return False
 
 

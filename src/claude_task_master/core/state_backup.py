@@ -51,11 +51,11 @@ class BackupRecoveryMixin:
 
     def release_session_lock(self) -> None:
         """Release session lock - provided by StateManager."""
-        ...
+        raise NotImplementedError("Provided by StateManager")
 
     def _atomic_write_json(self, path: Path, data: dict) -> None:
         """Atomically write JSON data - provided by StateManager."""
-        ...
+        raise NotImplementedError("Provided by StateManager")
 
     def _attempt_recovery(self, original_error: Exception) -> TaskState | None:
         """Attempt to recover state from backup.
