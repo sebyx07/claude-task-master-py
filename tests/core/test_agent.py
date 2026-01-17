@@ -6,19 +6,22 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from claude_task_master.core.agent import (
-    AgentError,
     AgentWrapper,
+    ModelType,
+    ToolConfig,
+)
+from claude_task_master.core.agent_exceptions import (
+    TRANSIENT_ERRORS,
+    AgentError,
     APIAuthenticationError,
     APIConnectionError,
     APIRateLimitError,
     APIServerError,
     APITimeoutError,
     ContentFilterError,
-    ModelType,
     QueryExecutionError,
     SDKImportError,
     SDKInitializationError,
-    ToolConfig,
     WorkingDirectoryError,
 )
 from claude_task_master.core.rate_limit import RateLimitConfig
@@ -232,7 +235,7 @@ class TestContentFilterError:
     def test_content_filter_error_not_retryable(self):
         """Test that ContentFilterError is not in transient errors."""
         # ContentFilterError should NOT be retryable
-        assert ContentFilterError not in AgentWrapper.TRANSIENT_ERRORS  # type: ignore[comparison-overlap]
+        assert ContentFilterError not in TRANSIENT_ERRORS
 
 
 class TestWorkingDirectoryError:

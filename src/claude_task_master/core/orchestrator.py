@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from . import console
-from .agent import AgentError, AgentWrapper, ContentFilterError
+from .agent import AgentWrapper
+from .agent_exceptions import AgentError, ContentFilterError
 from .circuit_breaker import CircuitBreakerError
 from .key_listener import (
     get_cancellation_reason,

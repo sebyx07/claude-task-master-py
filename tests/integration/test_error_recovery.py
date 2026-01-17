@@ -16,10 +16,8 @@ import pytest
 from typer.testing import CliRunner
 
 from claude_task_master.cli import app
-from claude_task_master.core.agent import (
-    AgentWrapper,
-    APIRateLimitError,
-)
+from claude_task_master.core.agent import AgentWrapper
+from claude_task_master.core.agent_exceptions import APIRateLimitError
 from claude_task_master.core.credentials import CredentialManager
 from claude_task_master.core.state import StateManager, TaskOptions
 
