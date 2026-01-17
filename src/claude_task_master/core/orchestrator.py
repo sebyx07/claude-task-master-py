@@ -222,6 +222,10 @@ class WorkLoopOrchestrator:
             return 2
 
         try:
+            console.detail(
+                f"Checking completion: task_index={state.current_task_index}, "
+                f"is_all_complete={self.task_runner.is_all_complete(state)}"
+            )
             while not self.task_runner.is_all_complete(state):
                 # Check cancellation
                 if is_cancellation_requested():
@@ -248,6 +252,13 @@ class WorkLoopOrchestrator:
                     unregister_handlers()
                     console.info(self.tracker.get_cost_report())
                     return result
+
+                # Debug: check completion after each cycle
+                console.detail(
+                    f"After cycle: task_index={state.current_task_index}, "
+                    f"stage={state.workflow_stage}, "
+                    f"is_all_complete={self.task_runner.is_all_complete(state)}"
+                )
 
                 # Check session limit
                 if state.options.max_sessions and state.session_count >= state.options.max_sessions:

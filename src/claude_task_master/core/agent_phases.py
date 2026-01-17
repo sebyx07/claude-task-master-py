@@ -8,7 +8,8 @@ following the Single Responsibility Principle (SRP). It handles:
 """
 
 import asyncio
-from typing import TYPE_CHECKING, Any
+from collections.abc import Coroutine
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from . import console
 from .agent_models import ModelType, ToolConfig
@@ -17,6 +18,57 @@ from .prompts import build_planning_prompt, build_verification_prompt, build_wor
 if TYPE_CHECKING:
     from .agent_query import AgentQueryExecutor
     from .logger import TaskLogger
+
+T = TypeVar("T")
+
+
+def run_async_with_cleanup(coro: Coroutine[Any, Any, T]) -> T:
+    """Run async coroutine with proper cleanup on KeyboardInterrupt.
+
+    This ensures that when Ctrl+C is pressed, all pending tasks are cancelled
+    and the event loop is properly closed.
+
+    Args:
+        coro: The coroutine to run.
+
+    Returns:
+        The result of the coroutine.
+
+    Raises:
+        KeyboardInterrupt: Re-raised after cleanup to allow proper handling.
+    """
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    main_task = loop.create_task(coro)
+
+    try:
+        return loop.run_until_complete(main_task)
+    except KeyboardInterrupt:
+        # Cancel the main task and any pending tasks
+        main_task.cancel()
+        try:
+            # Give tasks a chance to clean up
+            loop.run_until_complete(main_task)
+        except asyncio.CancelledError:
+            pass
+
+        # Cancel all remaining tasks
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+
+        if pending:
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+
+        # Re-raise to let caller handle it
+        raise
+    finally:
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception:
+            pass
+        loop.close()
 
 
 class AgentPhaseExecutor:
@@ -72,7 +124,7 @@ class AgentPhaseExecutor:
         console.info("Planning with Opus (smartest model)...")
 
         # Run async query with Opus override
-        result = asyncio.run(
+        result = run_async_with_cleanup(
             self.query_executor.run_query(
                 prompt=prompt,
                 tools=self.get_tools_for_phase("planning"),
@@ -126,7 +178,7 @@ class AgentPhaseExecutor:
         )
 
         # Run async query with optional model override
-        result = asyncio.run(
+        result = run_async_with_cleanup(
             self.query_executor.run_query(
                 prompt=prompt,
                 tools=self.get_tools_for_phase("working"),
@@ -160,7 +212,7 @@ class AgentPhaseExecutor:
         prompt = build_verification_prompt(criteria=criteria, tasks_summary=context)
 
         # Run async query with verification tools (read + bash for running tests)
-        result = asyncio.run(
+        result = run_async_with_cleanup(
             self.query_executor.run_query(
                 prompt=prompt,
                 tools=self.get_tools_for_phase("verification"),
