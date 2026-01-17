@@ -236,6 +236,14 @@ class PRContextManager:
                 except Exception as e:
                     console.warning(f"  Failed to post reply: {e}")
 
+            # Delete the resolve-comments.json after processing to prevent re-processing
+            # New comments from CodeRabbit or reviewers will be fetched fresh next cycle
+            try:
+                resolve_file.unlink()
+                console.detail("Deleted resolve-comments.json after processing")
+            except Exception as del_err:
+                console.warning(f"Could not delete resolve-comments.json: {del_err}")
+
         except Exception as e:
             console.warning(f"Could not post comment replies: {e}")
 
