@@ -31,14 +31,21 @@ class PRContextManager:
         self.state_manager = state_manager
         self.github_client = github_client
 
-    def save_ci_failures(self, pr_number: int | None) -> None:
+    def save_ci_failures(
+        self, pr_number: int | None, *, _also_save_comments: bool = True
+    ) -> None:
         """Save CI failure logs to files for Claude to read.
 
         Args:
             pr_number: The PR number.
+            _also_save_comments: Internal flag to also save comments (prevents recursion).
         """
         if pr_number is None:
             return
+
+        # Also save comments when saving CI failures (for complete context)
+        if _also_save_comments:
+            self.save_pr_comments(pr_number, _also_save_ci=False)
 
         # Clear old CI logs to avoid stale data
         try:
@@ -67,14 +74,21 @@ class PRContextManager:
         except Exception as e:
             console.warning(f"Could not save CI failures: {e}")
 
-    def save_pr_comments(self, pr_number: int | None) -> None:
+    def save_pr_comments(
+        self, pr_number: int | None, *, _also_save_ci: bool = True
+    ) -> None:
         """Fetch and save PR comments to files for Claude to read.
 
         Args:
             pr_number: The PR number.
+            _also_save_ci: Internal flag to also save CI failures (prevents recursion).
         """
         if pr_number is None:
             return
+
+        # Also save CI failures when saving comments (for complete context)
+        if _also_save_ci:
+            self.save_ci_failures(pr_number, _also_save_comments=False)
 
         # Clear old comments to avoid stale data
         try:
