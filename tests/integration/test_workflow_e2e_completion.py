@@ -126,13 +126,6 @@ class TestMultiTaskWorkflow:
 3. Documentation is updated
 """)
 
-        # Track work session calls to verify all tasks are processed
-        work_call_count = [0]
-
-        def track_work_response(**kwargs):
-            work_call_count[0] += 1
-            return {"output": f"Completed task {work_call_count[0]}", "success": True}
-
         patched_sdk.set_work_response("Task completed successfully.")
         patched_sdk.set_verify_response("All success criteria met! All 4 tasks completed.")
 
