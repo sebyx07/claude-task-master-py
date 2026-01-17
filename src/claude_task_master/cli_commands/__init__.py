@@ -1,5 +1,7 @@
 """CLI command modules for Claude Task Master."""
 
+from .github import register_github_commands
+from .info import register_info_commands
 from .workflow import register_workflow_commands
 
-__all__ = ["register_workflow_commands"]
+__all__ = ["register_workflow_commands", "register_info_commands", "register_github_commands"]
