@@ -58,12 +58,12 @@ class TestAgentError:
 
     def test_agent_error_can_be_raised(self):
         """Test AgentError can be raised and caught."""
-        with pytest.raises(AgentError, match="Raised error") as exc_info:
-            raise AgentError("Raised error", "With details")
-        # CodeQL false positive: pytest.raises() catches the exception and allows
-        # code to continue after the with block. This IS reachable and is standard pytest.
-        error = exc_info.value  # lgtm[py/unreachable-statement]
-        assert error.details == "With details"
+        # Create the error first to verify its properties after catching
+        error_to_raise = AgentError("Raised error", "With details")
+        with pytest.raises(AgentError, match="Raised error"):
+            raise error_to_raise
+        # Verify the error properties (we already have the reference)
+        assert error_to_raise.details == "With details"
 
     def test_agent_error_format_message_with_details(self):
         """Test _format_message includes details properly."""
