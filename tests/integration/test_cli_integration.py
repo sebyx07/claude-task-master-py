@@ -175,7 +175,9 @@ class TestStartCommandIntegration:
                     "raw_output": "Planning complete",
                 }
 
-                with patch("claude_task_master.cli_commands.workflow.WorkLoopOrchestrator") as mock_orch_class:
+                with patch(
+                    "claude_task_master.cli_commands.workflow.WorkLoopOrchestrator"
+                ) as mock_orch_class:
                     mock_orch = MagicMock()
                     mock_orch_class.return_value = mock_orch
                     mock_orch.run.return_value = 0  # Success
@@ -200,7 +202,9 @@ class TestResumeCommandIntegration:
         """Test resume command loads credentials."""
         with patch("claude_task_master.cli_commands.workflow.AgentWrapper"):
             with patch("claude_task_master.cli_commands.workflow.Planner"):
-                with patch("claude_task_master.cli_commands.workflow.WorkLoopOrchestrator") as mock_orch:
+                with patch(
+                    "claude_task_master.cli_commands.workflow.WorkLoopOrchestrator"
+                ) as mock_orch:
                     mock_orch.return_value.run.return_value = 0
 
                     result = cli_runner.invoke(app, ["resume"])
@@ -257,7 +261,9 @@ class TestResumeCommandIntegration:
         """Test resuming paused task with credentials."""
         with patch("claude_task_master.cli_commands.workflow.AgentWrapper"):
             with patch("claude_task_master.cli_commands.workflow.Planner"):
-                with patch("claude_task_master.cli_commands.workflow.WorkLoopOrchestrator") as mock_orch:
+                with patch(
+                    "claude_task_master.cli_commands.workflow.WorkLoopOrchestrator"
+                ) as mock_orch:
                     mock_orch.return_value.run.return_value = 0
 
                     result = cli_runner.invoke(app, ["resume"])
@@ -272,7 +278,9 @@ class TestResumeCommandIntegration:
         """Test resuming blocked task with credentials."""
         with patch("claude_task_master.cli_commands.workflow.AgentWrapper"):
             with patch("claude_task_master.cli_commands.workflow.Planner"):
-                with patch("claude_task_master.cli_commands.workflow.WorkLoopOrchestrator") as mock_orch:
+                with patch(
+                    "claude_task_master.cli_commands.workflow.WorkLoopOrchestrator"
+                ) as mock_orch:
                     mock_orch.return_value.run.return_value = 2
 
                     result = cli_runner.invoke(app, ["resume"])
@@ -509,7 +517,9 @@ class TestMultiCommandWorkflow:
 
                 mock_planner.return_value.create_plan.side_effect = create_plan_side_effect
 
-                with patch("claude_task_master.cli_commands.workflow.WorkLoopOrchestrator") as mock_orch:
+                with patch(
+                    "claude_task_master.cli_commands.workflow.WorkLoopOrchestrator"
+                ) as mock_orch:
                     mock_orch.return_value.run.return_value = 2  # Paused
 
                     start_result = cli_runner.invoke(app, ["start", "Test workflow"])
@@ -545,7 +555,9 @@ class TestMultiCommandWorkflow:
         # Step 2: Resume
         with patch("claude_task_master.cli_commands.workflow.AgentWrapper"):
             with patch("claude_task_master.cli_commands.workflow.Planner"):
-                with patch("claude_task_master.cli_commands.workflow.WorkLoopOrchestrator") as mock_orch:
+                with patch(
+                    "claude_task_master.cli_commands.workflow.WorkLoopOrchestrator"
+                ) as mock_orch:
                     mock_orch.return_value.run.return_value = 0
 
                     resume_result = cli_runner.invoke(app, ["resume"])
@@ -691,7 +703,9 @@ class TestErrorRecovery:
         # Second attempt should succeed
         with patch("claude_task_master.cli_commands.workflow.AgentWrapper"):
             with patch("claude_task_master.cli_commands.workflow.Planner"):
-                with patch("claude_task_master.cli_commands.workflow.WorkLoopOrchestrator") as mock_orch:
+                with patch(
+                    "claude_task_master.cli_commands.workflow.WorkLoopOrchestrator"
+                ) as mock_orch:
                     mock_orch.return_value.run.return_value = 0
 
                     result2 = cli_runner.invoke(app, ["resume"])
