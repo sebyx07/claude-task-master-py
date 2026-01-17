@@ -97,12 +97,19 @@ class TestStateValidation:
         runner,
         integration_temp_dir: Path,
         integration_state_dir: Path,
+        mock_credentials_file: Path,
         blocked_state,
+        patched_sdk,
         monkeypatch,
     ):
         """Test that blocked state shows appropriate info on resume."""
         monkeypatch.chdir(integration_temp_dir)
         monkeypatch.setattr(StateManager, "STATE_DIR", integration_state_dir)
+        monkeypatch.setattr(CredentialManager, "CREDENTIALS_PATH", mock_credentials_file)
+
+        # Set up SDK responses so it doesn't block
+        patched_sdk.set_work_response("Completed.")
+        patched_sdk.set_verify_response("Success!")
 
         result = runner.invoke(app, ["resume"])
 
