@@ -11,6 +11,20 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from . import console
+from .agent_exceptions import (
+    TRANSIENT_ERRORS,
+    AgentError,
+    APIAuthenticationError,
+    APIConnectionError,
+    APIRateLimitError,
+    APIServerError,
+    APITimeoutError,
+    ContentFilterError,
+    QueryExecutionError,
+    SDKImportError,
+    SDKInitializationError,
+    WorkingDirectoryError,
+)
 from .circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
@@ -24,140 +38,6 @@ from .subagents import get_agents_for_working_dir
 if TYPE_CHECKING:
     from .hooks import HookMatcher
     from .logger import TaskLogger
-
-# =============================================================================
-# Custom Exception Classes
-# =============================================================================
-
-
-class AgentError(Exception):
-    """Base exception for all agent-related errors."""
-
-    def __init__(self, message: str, details: str | None = None):
-        self.message = message
-        self.details = details
-        super().__init__(self._format_message())
-
-    def _format_message(self) -> str:
-        if self.details:
-            return f"{self.message}\n  Details: {self.details}"
-        return self.message
-
-
-class SDKImportError(AgentError):
-    """Raised when the Claude Agent SDK cannot be imported."""
-
-    def __init__(self, original_error: Exception | None = None):
-        self.original_error = original_error
-        details = str(original_error) if original_error else None
-        super().__init__(
-            "claude-agent-sdk not installed or cannot be imported",
-            details or "Install with: pip install claude-agent-sdk",
-        )
-
-
-class SDKInitializationError(AgentError):
-    """Raised when SDK components cannot be initialized."""
-
-    def __init__(self, component: str, original_error: Exception):
-        self.component = component
-        self.original_error = original_error
-        super().__init__(
-            f"Failed to initialize SDK component: {component}",
-            str(original_error),
-        )
-
-
-class QueryExecutionError(AgentError):
-    """Raised when a query execution fails."""
-
-    def __init__(self, message: str, original_error: Exception | None = None):
-        self.original_error = original_error
-        details = str(original_error) if original_error else None
-        super().__init__(message, details)
-
-
-class APIRateLimitError(QueryExecutionError):
-    """Raised when API rate limit is exceeded."""
-
-    def __init__(self, retry_after: float | None = None, original_error: Exception | None = None):
-        self.retry_after = retry_after
-        message = "API rate limit exceeded"
-        if retry_after:
-            message += f" (retry after {retry_after} seconds)"
-        super().__init__(message, original_error)
-
-
-class APIConnectionError(QueryExecutionError):
-    """Raised when there's a connection error to the API."""
-
-    def __init__(self, original_error: Exception):
-        super().__init__(
-            "Failed to connect to Claude API",
-            original_error,
-        )
-
-
-class APITimeoutError(QueryExecutionError):
-    """Raised when API request times out."""
-
-    def __init__(self, timeout: float, original_error: Exception | None = None):
-        self.timeout = timeout
-        super().__init__(
-            f"API request timed out after {timeout} seconds",
-            original_error,
-        )
-
-
-class APIAuthenticationError(QueryExecutionError):
-    """Raised when API authentication fails."""
-
-    def __init__(self, original_error: Exception | None = None):
-        super().__init__(
-            "API authentication failed - check your credentials",
-            original_error,
-        )
-
-
-class APIServerError(QueryExecutionError):
-    """Raised when the API server returns a 5xx error."""
-
-    def __init__(self, status_code: int, original_error: Exception | None = None):
-        self.status_code = status_code
-        super().__init__(
-            f"API server error (HTTP {status_code})",
-            original_error,
-        )
-
-
-class ContentFilterError(QueryExecutionError):
-    """Raised when output is blocked by content filtering policy.
-
-    This error is NOT retryable - the content itself triggered the filter.
-    See: https://privacy.claude.com/en/articles/9205721-why-am-i-receiving-an-output-blocked-by-content-filtering-policy-error
-    """
-
-    def __init__(self, original_error: Exception | None = None):
-        super().__init__(
-            "Output blocked by content filtering policy. "
-            "Try rephrasing your request or breaking it into smaller tasks. "
-            "See: https://privacy.claude.com/en/articles/9205721",
-            original_error,
-        )
-
-
-class WorkingDirectoryError(AgentError):
-    """Raised when there's an issue with the working directory."""
-
-    def __init__(self, path: str, operation: str, original_error: Exception):
-        self.path = path
-        self.operation = operation
-        self.original_error = original_error
-        super().__init__(
-            f"Failed to {operation} working directory: {path}",
-            str(original_error),
-        )
-
 
 # =============================================================================
 # Enums
@@ -284,14 +164,6 @@ def parse_task_complexity(task_description: str) -> tuple[TaskComplexity, str]:
 
 class AgentWrapper:
     """Wraps Claude Agent SDK for task execution."""
-
-    # Transient error types that should be retried
-    TRANSIENT_ERRORS = (
-        APIRateLimitError,
-        APIConnectionError,
-        APITimeoutError,
-        APIServerError,
-    )
 
     def __init__(
         self,
@@ -587,7 +459,7 @@ class AgentWrapper:
                 # Circuit breaker tripped - don't retry
                 console.warning("Circuit breaker opened due to repeated failures")
                 raise
-            except self.TRANSIENT_ERRORS as e:
+            except TRANSIENT_ERRORS as e:
                 last_error = e
                 if attempt < max_retries:
                     # Calculate backoff using rate limit config

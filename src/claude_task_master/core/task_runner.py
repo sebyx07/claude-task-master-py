@@ -13,7 +13,8 @@ import subprocess
 from typing import TYPE_CHECKING
 
 from . import console
-from .agent import AgentError, ModelType
+from .agent import ModelType
+from .agent_exceptions import AgentError
 from .task_group import (
     ParsedTask,
     TaskComplexity,
