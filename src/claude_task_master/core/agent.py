@@ -19,6 +19,7 @@ from .circuit_breaker import (
 )
 from .prompts import build_planning_prompt, build_verification_prompt, build_work_prompt
 from .rate_limit import RateLimitConfig
+from .subagents import get_agents_for_working_dir
 
 if TYPE_CHECKING:
     from .hooks import HookMatcher
@@ -676,7 +677,10 @@ class AgentWrapper:
             except OSError as e:
                 raise WorkingDirectoryError(self.working_dir, "change to", e) from e
 
-            # Create options with model specification
+            # Load subagents from .claude/agents/ directory
+            agents = get_agents_for_working_dir(self.working_dir)
+
+            # Create options with model specification and subagents
             try:
                 options = self.options_class(
                     allowed_tools=tools,
@@ -685,6 +689,7 @@ class AgentWrapper:
                     cwd=str(self.working_dir),  # Project directory for CLAUDE.md
                     setting_sources=["user", "local", "project"],  # Load all settings/skills
                     hooks=self.hooks,  # type: ignore[arg-type]  # Compatible HookMatcher
+                    agents=agents if agents else None,  # Programmatic subagents
                 )
             except Exception as e:
                 raise SDKInitializationError("ClaudeAgentOptions", e) from e

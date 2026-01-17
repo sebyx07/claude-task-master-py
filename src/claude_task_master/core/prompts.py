@@ -118,15 +118,10 @@ Your mission: **{goal}**
 Think strategically about the entire goal. Consider architecture, dependencies,
 testing strategy, and how all pieces fit together. Plan for success.
 
-## FIRST: Read Project Instructions
-
-**Always read `CLAUDE.md` first** (if it exists) - it contains project-specific
-instructions, coding standards, and important context you must follow.
-
 ## TOOL RESTRICTIONS (MANDATORY)
 
 **ALLOWED TOOLS (use ONLY these):**
-- `Read` - Read files to understand the codebase (start with CLAUDE.md!)
+- `Read` - Read files to understand the codebase
 - `Glob` - Find files by pattern
 - `Grep` - Search for code patterns
 - `Bash` - Run commands (git status, tests, lint checks, etc.)
@@ -324,7 +319,7 @@ def build_work_prompt(
 
 **Focus on THIS task only. Do not work ahead to other tasks.**
 
-🎯 **Deliver HIGH QUALITY work. Read and respect `CLAUDE.md` project instructions.**
+🎯 **Deliver HIGH QUALITY work. Follow project instructions.**
 
 📋 **Full plan:** `.claude-task-master/plan.md` | **Progress:** `.claude-task-master/progress.md`"""
     )
@@ -377,21 +372,17 @@ git status
 - If on main/master, create a feature branch first
 - If already on a feature branch, continue working there
 
-**2. Read CLAUDE.md** (if exists)
-- Contains project-specific instructions and coding standards
-- Follow these rules strictly
-
-**3. Understand the task**
+**2. Understand the task**
 - Read files before modifying
 - Check existing patterns
 - Identify tests to run
 
-**4. Make changes**
+**3. Make changes**
 - Edit existing files, Write new files
-- Follow project coding style from CLAUDE.md
+- Follow project coding style
 - Stay focused on current task
 
-**5. Verify work**
+**4. Verify work**
 ```bash
 # Common verification commands
 pytest                    # Python tests
@@ -400,7 +391,7 @@ ruff check . && mypy .   # Python lint/types
 eslint . && tsc          # JS lint/types
 ```
 
-**6. Commit properly**
+**5. Commit properly**
 ```bash
 git add -A && git commit -m "$(cat <<'EOF'
 type: Brief description (50 chars)
@@ -416,7 +407,7 @@ EOF
 **Note:** The `.claude-task-master/` directory is automatically gitignored - it contains
 orchestrator state files that should never be committed.
 
-**7. Push and Create PR** (REQUIRED)
+**6. Push and Create PR** (REQUIRED)
 ```bash
 git push -u origin HEAD
 gh pr create --title "[claudetm] type: description" --body "..." --label "claudetm" 2>/dev/null || echo "PR exists"
@@ -434,7 +425,7 @@ gh pr create --title "[claudetm] type: description" --body "..." --label "claude
 
 **The orchestrator handles CI/reviews/merge automatically.**
 
-**8. Log File Best Practices**
+**7. Log File Best Practices**
 - For log/progress files, use APPEND mode (don't read entire file)
 - Example: `echo "message" >> progress.md` instead of Read + Write
 - This avoids context bloat from reading large log files""",

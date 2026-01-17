@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from . import console
 from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 from .rate_limit import RateLimitConfig
+from .subagents import get_agents_for_working_dir
 
 if TYPE_CHECKING:
     from .hooks import HookMatcher
@@ -177,6 +178,9 @@ class ConversationManager:
         if self._options_class is None:
             raise ConversationError("SDK not initialized")
 
+        # Load subagents from .claude/agents/ directory
+        agents = get_agents_for_working_dir(self.working_dir)
+
         return self._options_class(
             allowed_tools=tools,
             permission_mode="bypassPermissions",
@@ -184,6 +188,7 @@ class ConversationManager:
             cwd=str(self.working_dir),
             setting_sources=["user", "local", "project"],
             hooks=self.hooks,
+            agents=agents if agents else None,
         )
 
     @asynccontextmanager
