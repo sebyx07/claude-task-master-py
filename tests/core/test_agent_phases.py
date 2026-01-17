@@ -1,0 +1,872 @@
+"""Tests for AgentWrapper planning, working, and verification phases.
+
+This module contains tests for:
+- Tool configurations for different phases (planning, working, verification)
+- Prompt building for each phase
+- Plan and criteria extraction
+- run_planning_phase method
+- run_work_session method
+- verify_success_criteria method
+- Phase integration and edge cases
+"""
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from claude_task_master.core.agent import AgentWrapper, ModelType, ToolConfig
+
+# =============================================================================
+# ToolConfig Enum Tests
+# =============================================================================
+
+
+class TestToolConfig:
+    """Tests for ToolConfig enum."""
+
+    def test_planning_tools(self):
+        """Test PLANNING tool configuration - read-only tools for exploration."""
+        expected = [
+            "Read",
+            "Glob",
+            "Grep",
+            "Bash",
+        ]
+        assert ToolConfig.PLANNING.value == expected
+
+    def test_working_tools(self):
+        """Test WORKING tool configuration."""
+        expected = [
+            "Read",
+            "Write",
+            "Edit",
+            "Bash",
+            "Glob",
+            "Grep",
+            "Task",
+            "TodoWrite",
+            "WebSearch",
+            "WebFetch",
+            "Skill",
+        ]
+        assert ToolConfig.WORKING.value == expected
+
+    def test_verification_tools(self):
+        """Test VERIFICATION tool configuration - read tools + Bash for running tests."""
+        expected = [
+            "Read",
+            "Glob",
+            "Grep",
+            "Bash",
+        ]
+        assert ToolConfig.VERIFICATION.value == expected
+
+    def test_planning_has_subset_of_working_tools(self):
+        """Test planning tools are a subset of working tools (read-only)."""
+        planning_tools = set(ToolConfig.PLANNING.value)
+        working_tools = set(ToolConfig.WORKING.value)
+        assert planning_tools.issubset(working_tools)
+        assert planning_tools != working_tools  # Planning is restricted
+
+    def test_verification_has_subset_of_working_tools(self):
+        """Test verification tools are a subset of working tools."""
+        verification_tools = set(ToolConfig.VERIFICATION.value)
+        working_tools = set(ToolConfig.WORKING.value)
+        assert verification_tools.issubset(working_tools)
+        # Verification has Bash but no Write/Edit
+        assert "Bash" in verification_tools
+        assert "Write" not in verification_tools
+        assert "Edit" not in verification_tools
+
+
+# =============================================================================
+# AgentWrapper get_tools_for_phase Tests
+# =============================================================================
+
+
+class TestAgentWrapperGetToolsForPhase:
+    """Tests for get_tools_for_phase method."""
+
+    @pytest.fixture
+    def agent(self):
+        """Create an AgentWrapper instance for testing."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            return AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+            )
+
+    def test_planning_phase_tools(self, agent):
+        """Test get_tools_for_phase returns planning tools including Bash for checks."""
+        tools = agent.get_tools_for_phase("planning")
+        expected = [
+            "Read",
+            "Glob",
+            "Grep",
+            "Bash",
+        ]
+        assert tools == expected
+
+    def test_verification_phase_tools(self, agent):
+        """Test get_tools_for_phase returns verification tools (read + Bash)."""
+        tools = agent.get_tools_for_phase("verification")
+        expected = [
+            "Read",
+            "Glob",
+            "Grep",
+            "Bash",
+        ]
+        assert tools == expected
+
+    def test_working_phase_tools(self, agent):
+        """Test get_tools_for_phase returns working tools."""
+        tools = agent.get_tools_for_phase("working")
+        expected = [
+            "Read",
+            "Write",
+            "Edit",
+            "Bash",
+            "Glob",
+            "Grep",
+            "Task",
+            "TodoWrite",
+            "WebSearch",
+            "WebFetch",
+            "Skill",
+        ]
+        assert tools == expected
+
+    def test_unknown_phase_returns_working_tools(self, agent):
+        """Test unknown phase returns working tools by default."""
+        tools = agent.get_tools_for_phase("unknown")
+        expected = [
+            "Read",
+            "Write",
+            "Edit",
+            "Bash",
+            "Glob",
+            "Grep",
+            "Task",
+            "TodoWrite",
+            "WebSearch",
+            "WebFetch",
+            "Skill",
+        ]
+        assert tools == expected
+
+    def test_empty_phase_returns_working_tools(self, agent):
+        """Test empty phase string returns working tools."""
+        tools = agent.get_tools_for_phase("")
+        expected = [
+            "Read",
+            "Write",
+            "Edit",
+            "Bash",
+            "Glob",
+            "Grep",
+            "Task",
+            "TodoWrite",
+            "WebSearch",
+            "WebFetch",
+            "Skill",
+        ]
+        assert tools == expected
+
+
+# =============================================================================
+# AgentWrapper Prompt Building Tests
+# =============================================================================
+
+
+class TestAgentWrapperPromptBuilding:
+    """Tests for prompt building methods."""
+
+    @pytest.fixture
+    def agent(self):
+        """Create an AgentWrapper instance for testing."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            return AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+            )
+
+    def test_build_planning_prompt_includes_goal(self, agent):
+        """Test _build_planning_prompt includes the goal."""
+        goal = "Build a REST API"
+        prompt = agent._build_planning_prompt(goal, "")
+
+        assert "Build a REST API" in prompt
+
+    def test_build_planning_prompt_includes_context(self, agent):
+        """Test _build_planning_prompt includes the context."""
+        context = "Previous session completed setup."
+        prompt = agent._build_planning_prompt("Test goal", context)
+
+        assert "Previous session completed setup." in prompt
+
+    def test_build_planning_prompt_includes_task_list_format(self, agent):
+        """Test _build_planning_prompt includes task list format instructions."""
+        prompt = agent._build_planning_prompt("Test goal", "")
+
+        # Uses centralized prompts.py format
+        assert "Create Task List" in prompt  # Step 2: Create Task List
+        assert "- [ ]" in prompt
+        assert "Success Criteria" in prompt
+
+    def test_build_planning_prompt_includes_exploration_instruction(self, agent):
+        """Test _build_planning_prompt includes exploration instruction."""
+        prompt = agent._build_planning_prompt("Test goal", "")
+
+        # Must explore codebase before creating tasks
+        assert "Explore" in prompt
+        assert "READ ONLY" in prompt or "Read" in prompt
+
+    def test_build_planning_prompt_mentions_tools(self, agent):
+        """Test _build_planning_prompt mentions available tools."""
+        prompt = agent._build_planning_prompt("Test goal", "")
+
+        assert "Read" in prompt
+        assert "Glob" in prompt
+        assert "Grep" in prompt
+
+    def test_build_work_prompt_includes_task(self, agent):
+        """Test _build_work_prompt includes the task description."""
+        task = "Implement user authentication"
+        prompt = agent._build_work_prompt(task, "", None)
+
+        assert "Implement user authentication" in prompt
+
+    def test_build_work_prompt_includes_context(self, agent):
+        """Test _build_work_prompt includes context."""
+        context = "Using FastAPI framework."
+        prompt = agent._build_work_prompt("Test task", context, None)
+
+        assert "Using FastAPI framework." in prompt
+
+    def test_build_work_prompt_includes_pr_comments(self, agent):
+        """Test _build_work_prompt includes PR comments when provided."""
+        pr_comments = "Please add error handling for edge cases."
+        prompt = agent._build_work_prompt("Test task", "", pr_comments)
+
+        # Uses centralized prompts.py format
+        assert "PR Review Feedback" in prompt
+        assert "Please add error handling for edge cases." in prompt
+
+    def test_build_work_prompt_without_pr_comments(self, agent):
+        """Test _build_work_prompt without PR comments."""
+        prompt = agent._build_work_prompt("Test task", "", None)
+
+        assert "PR Review Feedback" not in prompt
+
+    def test_build_work_prompt_mentions_tools(self, agent):
+        """Test _build_work_prompt mentions git and common commands."""
+        prompt = agent._build_work_prompt("Test task", "", None)
+
+        # Check for key workflow elements instead of tool names
+        assert "git" in prompt
+        assert "commit" in prompt
+        assert "Edit" in prompt
+        assert "Write" in prompt
+
+
+# =============================================================================
+# AgentWrapper Extract Methods Tests
+# =============================================================================
+
+
+class TestAgentWrapperExtractMethods:
+    """Tests for plan/criteria extraction methods."""
+
+    @pytest.fixture
+    def agent(self):
+        """Create an AgentWrapper instance for testing."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            return AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+            )
+
+    def test_extract_plan_with_proper_format(self, agent):
+        """Test _extract_plan returns result with proper format."""
+        result = """## Task List
+
+- [ ] Task 1
+- [ ] Task 2
+
+## Success Criteria
+
+1. All tests pass
+"""
+        extracted = agent._extract_plan(result)
+        assert extracted == result
+
+    def test_extract_plan_wraps_improper_format(self, agent):
+        """Test _extract_plan wraps result without proper format."""
+        result = "Some unformatted content"
+        extracted = agent._extract_plan(result)
+
+        assert "## Task List" in extracted
+        assert "Some unformatted content" in extracted
+
+    def test_extract_criteria_with_proper_format(self, agent):
+        """Test _extract_criteria extracts criteria section."""
+        result = """## Task List
+
+- [ ] Task 1
+
+## Success Criteria
+
+1. All tests pass
+2. Coverage > 80%
+"""
+        extracted = agent._extract_criteria(result)
+
+        assert "1. All tests pass" in extracted
+        assert "2. Coverage > 80%" in extracted
+
+    def test_extract_criteria_without_criteria_section(self, agent):
+        """Test _extract_criteria returns default when no criteria section."""
+        result = """## Task List
+
+- [ ] Task 1
+- [ ] Task 2
+"""
+        extracted = agent._extract_criteria(result)
+
+        assert "All tasks in the task list are completed successfully." in extracted
+
+    def test_extract_criteria_empty_result(self, agent):
+        """Test _extract_criteria with empty result."""
+        extracted = agent._extract_criteria("")
+        assert "All tasks in the task list are completed successfully." in extracted
+
+
+# =============================================================================
+# AgentWrapper run_planning_phase Tests
+# =============================================================================
+
+
+class TestAgentWrapperRunPlanningPhase:
+    """Tests for run_planning_phase method."""
+
+    @pytest.fixture
+    def agent_with_mock(self, temp_dir):
+        """Create an AgentWrapper with mocked _run_query."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                working_dir=str(temp_dir),
+            )
+        return agent
+
+    def test_run_planning_phase_returns_dict(self, agent_with_mock):
+        """Test run_planning_phase returns a dictionary."""
+        mock_result = """## Task List
+
+- [ ] Setup project
+- [ ] Implement feature
+
+## Success Criteria
+
+1. All tests pass
+"""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_result
+            with patch("asyncio.run", return_value=mock_result):
+                result = agent_with_mock.run_planning_phase("Build API")
+
+        assert isinstance(result, dict)
+
+    def test_run_planning_phase_contains_required_keys(self, agent_with_mock):
+        """Test run_planning_phase returns required keys."""
+        mock_result = """## Task List
+
+- [ ] Task 1
+
+## Success Criteria
+
+1. Criterion
+"""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_result
+            with patch("asyncio.run", return_value=mock_result):
+                result = agent_with_mock.run_planning_phase("Goal")
+
+        assert "plan" in result
+        assert "criteria" in result
+        assert "raw_output" in result
+
+    def test_run_planning_phase_uses_planning_tools(self, agent_with_mock):
+        """Test run_planning_phase uses planning tools."""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "test result"
+
+            async def run_query_capture(*args, **kwargs):
+                return "test result"
+
+            mock_query.side_effect = run_query_capture
+
+            with patch("asyncio.run") as mock_asyncio:
+                mock_asyncio.return_value = "test result"
+                agent_with_mock.run_planning_phase("Goal")
+
+                # Check that asyncio.run was called
+                assert mock_asyncio.called
+
+    def test_run_planning_phase_with_context(self, agent_with_mock):
+        """Test run_planning_phase includes context."""
+        mock_result = """## Task List
+
+- [ ] Task 1
+
+## Success Criteria
+
+1. Done
+"""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_result
+            with patch("asyncio.run", return_value=mock_result):
+                result = agent_with_mock.run_planning_phase("Goal", context="Previous info")
+
+        assert result is not None
+        assert "plan" in result
+
+    def test_run_planning_phase_extracts_plan_correctly(self, agent_with_mock):
+        """Test run_planning_phase extracts plan correctly."""
+        mock_result = """## Task List
+
+- [ ] Setup database
+- [ ] Create API endpoints
+- [ ] Write tests
+
+## Success Criteria
+
+1. All endpoints respond correctly
+2. 90% test coverage
+"""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = mock_result
+            with patch("asyncio.run", return_value=mock_result):
+                result = agent_with_mock.run_planning_phase("Build API")
+
+        assert "Setup database" in result["plan"]
+        assert "Create API endpoints" in result["plan"]
+        assert "All endpoints respond correctly" in result["criteria"]
+
+
+# =============================================================================
+# AgentWrapper run_work_session Tests
+# =============================================================================
+
+
+class TestAgentWrapperRunWorkSession:
+    """Tests for run_work_session method."""
+
+    @pytest.fixture
+    def agent_with_mock(self, temp_dir):
+        """Create an AgentWrapper with mocked methods."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                working_dir=str(temp_dir),
+            )
+        return agent
+
+    def test_run_work_session_returns_dict(self, agent_with_mock):
+        """Test run_work_session returns a dictionary."""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "Work completed"
+            with patch("asyncio.run", return_value="Work completed"):
+                result = agent_with_mock.run_work_session("Implement feature")
+
+        assert isinstance(result, dict)
+
+    def test_run_work_session_contains_required_keys(self, agent_with_mock):
+        """Test run_work_session returns required keys."""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "Done"
+            with patch("asyncio.run", return_value="Done"):
+                result = agent_with_mock.run_work_session("Task")
+
+        assert "output" in result
+        assert "success" in result
+
+    def test_run_work_session_assumes_success(self, agent_with_mock):
+        """Test run_work_session assumes success for MVP."""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "Done"
+            with patch("asyncio.run", return_value="Done"):
+                result = agent_with_mock.run_work_session("Task")
+
+        assert result["success"] is True
+
+    def test_run_work_session_with_context(self, agent_with_mock):
+        """Test run_work_session includes context."""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "Done"
+            with patch("asyncio.run", return_value="Done"):
+                result = agent_with_mock.run_work_session("Task", context="Previous work info")
+
+        assert result is not None
+
+    def test_run_work_session_with_pr_comments(self, agent_with_mock):
+        """Test run_work_session includes PR comments."""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "Done"
+            with patch("asyncio.run", return_value="Done"):
+                result = agent_with_mock.run_work_session(
+                    "Task", pr_comments="Fix the error handling"
+                )
+
+        assert result is not None
+
+    def test_run_work_session_returns_output(self, agent_with_mock):
+        """Test run_work_session returns the output from query."""
+        expected_output = "Implemented the feature successfully with all tests passing."
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = expected_output
+            with patch("asyncio.run", return_value=expected_output):
+                result = agent_with_mock.run_work_session("Implement feature")
+
+        assert result["output"] == expected_output
+
+
+# =============================================================================
+# AgentWrapper verify_success_criteria Tests
+# =============================================================================
+
+
+class TestAgentWrapperVerifySuccessCriteria:
+    """Tests for verify_success_criteria method."""
+
+    @pytest.fixture
+    def agent_with_mock(self, temp_dir):
+        """Create an AgentWrapper with mocked methods."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                working_dir=str(temp_dir),
+            )
+        return agent
+
+    def test_verify_success_criteria_returns_dict(self, agent_with_mock):
+        """Test verify_success_criteria returns a dictionary."""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "All criteria met."
+            with patch("asyncio.run", return_value="All criteria met."):
+                result = agent_with_mock.verify_success_criteria("Tests pass")
+
+        assert isinstance(result, dict)
+
+    def test_verify_success_criteria_contains_required_keys(self, agent_with_mock):
+        """Test verify_success_criteria returns required keys."""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "Success"
+            with patch("asyncio.run", return_value="Success"):
+                result = agent_with_mock.verify_success_criteria("Tests pass")
+
+        assert "success" in result
+        assert "details" in result
+
+    def test_verify_success_criteria_detects_success(self, agent_with_mock):
+        """Test verify_success_criteria detects success indicators."""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "All criteria met. Everything is working correctly."
+            with patch(
+                "asyncio.run", return_value="All criteria met. Everything is working correctly."
+            ):
+                result = agent_with_mock.verify_success_criteria("Tests pass")
+
+        assert result["success"] is True
+
+    def test_verify_success_criteria_detects_failure(self, agent_with_mock):
+        """Test verify_success_criteria detects failure."""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "Some criteria are not met. Tests are failing."
+            with patch("asyncio.run", return_value="Some criteria are not met. Tests are failing."):
+                result = agent_with_mock.verify_success_criteria("Tests pass")
+
+        assert result["success"] is False
+
+    def test_verify_success_criteria_with_context(self, agent_with_mock):
+        """Test verify_success_criteria uses context."""
+        with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "Success confirmed"
+            with patch("asyncio.run", return_value="Success confirmed"):
+                result = agent_with_mock.verify_success_criteria(
+                    "Tests pass", context="Additional context info"
+                )
+
+        assert result is not None
+
+    def test_verify_success_criteria_uses_verification_tools(self, agent_with_mock):
+        """Test verify_success_criteria uses verification tools (read + Bash)."""
+        # The verification phase should use tools that can run tests
+        tools = agent_with_mock.get_tools_for_phase("verification")
+        assert "Bash" in tools  # Can run tests
+        assert "Read" in tools  # Can read files
+        assert "Write" not in tools  # Cannot modify files
+
+
+# =============================================================================
+# AgentWrapper Phase Integration Tests
+# =============================================================================
+
+
+class TestAgentWrapperPhaseIntegration:
+    """Integration tests for AgentWrapper phases."""
+
+    @pytest.fixture
+    def agent(self, temp_dir):
+        """Create an AgentWrapper instance for testing."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                working_dir=str(temp_dir),
+            )
+        return agent
+
+    def test_full_planning_to_verification_workflow(self, agent):
+        """Test complete workflow from planning to verification."""
+        planning_result = """## Task List
+
+- [ ] Setup project structure
+- [ ] Implement core logic
+- [ ] Add tests
+
+## Success Criteria
+
+1. All tests pass
+2. Documentation complete
+"""
+        work_result = "Completed all tasks successfully."
+        verification_result = "All criteria met. Project is complete."
+
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            # Test planning
+            mock_query.return_value = planning_result
+            with patch("asyncio.run", return_value=planning_result):
+                plan = agent.run_planning_phase("Build a library")
+
+            assert "plan" in plan
+            assert "criteria" in plan
+
+            # Test work session
+            mock_query.return_value = work_result
+            with patch("asyncio.run", return_value=work_result):
+                work = agent.run_work_session("Implement feature")
+
+            assert work["success"] is True
+
+            # Test verification
+            mock_query.return_value = verification_result
+            with patch("asyncio.run", return_value=verification_result):
+                verification = agent.verify_success_criteria("All tests pass")
+
+            assert verification["success"] is True
+
+    def test_multiple_work_sessions(self, agent):
+        """Test multiple work sessions in sequence."""
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            tasks = ["Task 1", "Task 2", "Task 3"]
+            results = []
+
+            for task in tasks:
+                mock_query.return_value = f"Completed {task}"
+                with patch("asyncio.run", return_value=f"Completed {task}"):
+                    result = agent.run_work_session(task)
+                    results.append(result)
+
+            assert len(results) == 3
+            for result in results:
+                assert result["success"] is True
+
+    def test_planning_to_multiple_tasks_workflow(self, agent):
+        """Test planning phase followed by multiple task executions."""
+        planning_result = """## Task List
+
+- [ ] Task A
+- [ ] Task B
+
+## Success Criteria
+
+1. All tasks done
+"""
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            # Planning phase
+            mock_query.return_value = planning_result
+            with patch("asyncio.run", return_value=planning_result):
+                plan = agent.run_planning_phase("Complete project")
+
+            # Parse tasks from plan
+            assert "Task A" in plan["plan"]
+            assert "Task B" in plan["plan"]
+
+            # Execute tasks
+            mock_query.return_value = "Task completed"
+            with patch("asyncio.run", return_value="Task completed"):
+                work_a = agent.run_work_session("Task A")
+                work_b = agent.run_work_session("Task B")
+
+            assert work_a["success"] is True
+            assert work_b["success"] is True
+
+
+# =============================================================================
+# AgentWrapper Phase Edge Cases Tests
+# =============================================================================
+
+
+class TestAgentWrapperPhaseEdgeCases:
+    """Edge case tests for AgentWrapper phases."""
+
+    @pytest.fixture
+    def agent(self, temp_dir):
+        """Create an AgentWrapper instance for testing."""
+        mock_sdk = MagicMock()
+        mock_sdk.query = AsyncMock()
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
+            agent = AgentWrapper(
+                access_token="test-token",
+                model=ModelType.SONNET,
+                working_dir=str(temp_dir),
+            )
+        return agent
+
+    def test_empty_goal_planning(self, agent):
+        """Test planning with empty goal."""
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "## Task List\n- [ ] Task"
+            with patch("asyncio.run", return_value="## Task List\n- [ ] Task"):
+                result = agent.run_planning_phase("")
+
+        assert result is not None
+
+    def test_empty_task_description_work_session(self, agent):
+        """Test work session with empty task description."""
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "Done"
+            with patch("asyncio.run", return_value="Done"):
+                result = agent.run_work_session("")
+
+        assert result["success"] is True
+
+    def test_very_long_goal(self, agent):
+        """Test planning with very long goal."""
+        long_goal = "A" * 10000
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "## Task List\n- [ ] Task"
+            with patch("asyncio.run", return_value="## Task List\n- [ ] Task"):
+                result = agent.run_planning_phase(long_goal)
+
+        assert result is not None
+
+    def test_special_characters_in_task(self, agent):
+        """Test work session with special characters."""
+        task = "Implement <feature> with 'quotes' and \"double quotes\" & special chars @#$%"
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "Done"
+            with patch("asyncio.run", return_value="Done"):
+                result = agent.run_work_session(task)
+
+        assert result["success"] is True
+
+    def test_unicode_in_context(self, agent):
+        """Test with unicode characters in context."""
+        context = "Context with unicode: \u65e5\u672c\u8a9e, emoji \U0001f680, and symbols \u2660\u2663\u2665\u2666"
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "Done"
+            with patch("asyncio.run", return_value="Done"):
+                result = agent.run_work_session("Task", context=context)
+
+        assert result["success"] is True
+
+    def test_multiline_pr_comments(self, agent):
+        """Test work session with multiline PR comments."""
+        pr_comments = """Line 1: Fix this error
+Line 2: Add error handling
+Line 3: Update documentation
+
+Also consider:
+- Adding tests
+- Improving coverage
+"""
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "Done"
+            with patch("asyncio.run", return_value="Done"):
+                result = agent.run_work_session("Task", pr_comments=pr_comments)
+
+        assert result["success"] is True
+
+    def test_verification_with_lowercase_success(self, agent):
+        """Test verification detects lowercase 'success'."""
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "The implementation is a success."
+            with patch("asyncio.run", return_value="The implementation is a success."):
+                result = agent.verify_success_criteria("Tests pass")
+
+        assert result["success"] is True
+
+    def test_verification_with_uppercase_criteria_met(self, agent):
+        """Test verification detects 'ALL CRITERIA MET'."""
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "All Criteria Met successfully"
+            with patch("asyncio.run", return_value="All Criteria Met successfully"):
+                result = agent.verify_success_criteria("Tests pass")
+
+        # Note: the check is case-insensitive because of .lower()
+        assert result["success"] is True
+
+    def test_empty_criteria_verification(self, agent):
+        """Test verification with empty criteria."""
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "All criteria met"
+            with patch("asyncio.run", return_value="All criteria met"):
+                result = agent.verify_success_criteria("")
+
+        assert result is not None
+
+    def test_very_long_criteria(self, agent):
+        """Test verification with very long criteria."""
+        long_criteria = "Criterion: " + "x" * 5000
+        with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
+            mock_query.return_value = "All criteria met"
+            with patch("asyncio.run", return_value="All criteria met"):
+                result = agent.verify_success_criteria(long_criteria)
+
+        assert result is not None
+        assert result["success"] is True
