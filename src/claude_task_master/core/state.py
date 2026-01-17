@@ -30,6 +30,9 @@ from claude_task_master.core.state_exceptions import (
     StateValidationError,
 )
 
+# Import file operations mixin
+from claude_task_master.core.state_file_ops import FileOperationsMixin
+
 # Import PR context mixin
 from claude_task_master.core.state_pr import PRContextMixin
 
@@ -55,6 +58,7 @@ __all__ = [
     "TaskState",
     "StateManager",
     "PRContextMixin",
+    "FileOperationsMixin",
     # Functions
     "file_lock",
 ]
@@ -165,10 +169,11 @@ def file_lock(
 # =============================================================================
 
 
-class StateManager(PRContextMixin):
+class StateManager(PRContextMixin, FileOperationsMixin):
     """Manages all state persistence.
 
     Inherits PR context methods from PRContextMixin.
+    Inherits file operations methods from FileOperationsMixin.
     """
 
     STATE_DIR = Path(".claude-task-master")
@@ -502,63 +507,9 @@ class StateManager(PRContextMixin):
         """
         return self._create_backup(self.state_file)
 
-    def save_goal(self, goal: str) -> None:
-        """Save goal to goal.txt."""
-        goal_file = self.state_dir / "goal.txt"
-        goal_file.write_text(goal)
-
-    def load_goal(self) -> str:
-        """Load goal from goal.txt."""
-        goal_file = self.state_dir / "goal.txt"
-        return goal_file.read_text()
-
-    def save_criteria(self, criteria: str) -> None:
-        """Save success criteria to criteria.txt."""
-        criteria_file = self.state_dir / "criteria.txt"
-        criteria_file.write_text(criteria)
-
-    def load_criteria(self) -> str | None:
-        """Load success criteria from criteria.txt."""
-        criteria_file = self.state_dir / "criteria.txt"
-        if criteria_file.exists():
-            return criteria_file.read_text()
-        return None
-
-    def save_plan(self, plan: str) -> None:
-        """Save task plan to plan.md."""
-        plan_file = self.state_dir / "plan.md"
-        plan_file.write_text(plan)
-
-    def load_plan(self) -> str | None:
-        """Load task plan from plan.md."""
-        plan_file = self.state_dir / "plan.md"
-        if plan_file.exists():
-            return plan_file.read_text()
-        return None
-
-    def save_progress(self, progress: str) -> None:
-        """Save progress summary to progress.md."""
-        progress_file = self.state_dir / "progress.md"
-        progress_file.write_text(progress)
-
-    def load_progress(self) -> str | None:
-        """Load progress summary from progress.md."""
-        progress_file = self.state_dir / "progress.md"
-        if progress_file.exists():
-            return progress_file.read_text()
-        return None
-
-    def save_context(self, context: str) -> None:
-        """Save accumulated context to context.md."""
-        context_file = self.state_dir / "context.md"
-        context_file.write_text(context)
-
-    def load_context(self) -> str:
-        """Load accumulated context from context.md."""
-        context_file = self.state_dir / "context.md"
-        if context_file.exists():
-            return context_file.read_text()
-        return ""
+    # File operations methods (save_goal, load_goal, save_criteria, load_criteria,
+    # save_plan, load_plan, save_progress, load_progress, save_context, load_context)
+    # are inherited from FileOperationsMixin
 
     def get_log_file(self, run_id: str) -> Path:
         """Get path to log file for run."""
@@ -665,24 +616,7 @@ class StateManager(PRContextMixin):
 
         return state
 
-    def _parse_plan_tasks(self, plan: str) -> list[str]:
-        """Parse tasks from plan markdown.
-
-        Args:
-            plan: The plan content in markdown format.
-
-        Returns:
-            List of task descriptions extracted from the plan.
-        """
-        tasks = []
-        for line in plan.split("\n"):
-            # Look for markdown checkbox lines
-            stripped = line.strip()
-            if stripped.startswith("- [ ]") or stripped.startswith("- [x]"):
-                task = stripped[5:].strip()  # Remove "- [ ]" or "- [x]"
-                if task:
-                    tasks.append(task)
-        return tasks
+    # _parse_plan_tasks is inherited from FileOperationsMixin
 
     def cleanup_on_success(self, run_id: str) -> None:
         """Clean up all state files except logs on success."""
@@ -719,3 +653,16 @@ class StateManager(PRContextMixin):
     # - save_ci_failure(pr_number: int, check_name: str, logs: str) -> None
     # - load_pr_context(pr_number: int) -> str
     # - clear_pr_context(pr_number: int) -> None
+
+    # File Operations Methods are inherited from FileOperationsMixin:
+    # - save_goal(goal: str) -> None
+    # - load_goal() -> str
+    # - save_criteria(criteria: str) -> None
+    # - load_criteria() -> str | None
+    # - save_plan(plan: str) -> None
+    # - load_plan() -> str | None
+    # - save_progress(progress: str) -> None
+    # - load_progress() -> str | None
+    # - save_context(context: str) -> None
+    # - load_context() -> str
+    # - _parse_plan_tasks(plan: str) -> list[str]
