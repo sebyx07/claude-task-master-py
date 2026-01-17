@@ -13,6 +13,9 @@ from typing import IO, Literal
 
 from pydantic import BaseModel, ValidationError
 
+# Import backup/recovery mixin
+from claude_task_master.core.state_backup import BackupRecoveryMixin
+
 # Import exceptions and state constants from dedicated module
 from claude_task_master.core.state_exceptions import (
     RESUMABLE_STATUSES,
@@ -29,6 +32,12 @@ from claude_task_master.core.state_exceptions import (
     StateResumeValidationError,
     StateValidationError,
 )
+
+# Import file operations mixin
+from claude_task_master.core.state_file_ops import FileOperationsMixin
+
+# Import PR context mixin
+from claude_task_master.core.state_pr import PRContextMixin
 
 # Re-export exceptions for backwards compatibility
 __all__ = [
@@ -51,6 +60,9 @@ __all__ = [
     "TaskOptions",
     "TaskState",
     "StateManager",
+    "PRContextMixin",
+    "FileOperationsMixin",
+    "BackupRecoveryMixin",
     # Functions
     "file_lock",
 ]
@@ -161,8 +173,13 @@ def file_lock(
 # =============================================================================
 
 
-class StateManager:
-    """Manages all state persistence."""
+class StateManager(PRContextMixin, FileOperationsMixin, BackupRecoveryMixin):
+    """Manages all state persistence.
+
+    Inherits PR context methods from PRContextMixin.
+    Inherits file operations methods from FileOperationsMixin.
+    Inherits backup/recovery methods from BackupRecoveryMixin.
+    """
 
     STATE_DIR = Path(".claude-task-master")
     LOCK_TIMEOUT = 5.0  # seconds
@@ -432,126 +449,12 @@ class StateManager:
                 pass
             raise
 
-    def _attempt_recovery(self, original_error: Exception) -> TaskState | None:
-        """Attempt to recover state from backup.
+    # Backup/recovery methods (_attempt_recovery, _create_backup, create_state_backup,
+    # cleanup_on_success, _cleanup_old_logs) are inherited from BackupRecoveryMixin
 
-        Args:
-            original_error: The error that triggered recovery.
-
-        Returns:
-            TaskState if recovery successful, None otherwise.
-        """
-        # First, create a backup of the corrupted file
-        if self.state_file.exists():
-            self._create_backup(self.state_file, suffix=".corrupted")
-
-        # Try to recover from backup
-        if self.backup_dir.exists():
-            # Get the most recent backup
-            backups = sorted(
-                self.backup_dir.glob("state.*.json"), key=lambda p: p.stat().st_mtime, reverse=True
-            )
-            for backup_file in backups:
-                try:
-                    with open(backup_file) as f:
-                        data = json.load(f)
-                    state = TaskState(**data)
-                    # Restore from backup
-                    self._atomic_write_json(self.state_file, data)
-                    return state
-                except (json.JSONDecodeError, ValidationError):
-                    continue
-
-        return None
-
-    def _create_backup(self, file_path: Path, suffix: str = "") -> Path | None:
-        """Create a backup of a file.
-
-        Args:
-            file_path: The file to backup.
-            suffix: Optional suffix to add to backup name.
-
-        Returns:
-            Path to the backup file, or None if backup failed.
-        """
-        if not file_path.exists():
-            return None
-
-        try:
-            self.backup_dir.mkdir(parents=True, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            backup_name = f"{file_path.stem}.{timestamp}{suffix}{file_path.suffix}"
-            backup_path = self.backup_dir / backup_name
-            shutil.copy2(file_path, backup_path)
-            return backup_path
-        except Exception:
-            return None
-
-    def create_state_backup(self) -> Path | None:
-        """Create a backup of the current state file.
-
-        Returns:
-            Path to the backup file, or None if backup failed.
-        """
-        return self._create_backup(self.state_file)
-
-    def save_goal(self, goal: str) -> None:
-        """Save goal to goal.txt."""
-        goal_file = self.state_dir / "goal.txt"
-        goal_file.write_text(goal)
-
-    def load_goal(self) -> str:
-        """Load goal from goal.txt."""
-        goal_file = self.state_dir / "goal.txt"
-        return goal_file.read_text()
-
-    def save_criteria(self, criteria: str) -> None:
-        """Save success criteria to criteria.txt."""
-        criteria_file = self.state_dir / "criteria.txt"
-        criteria_file.write_text(criteria)
-
-    def load_criteria(self) -> str | None:
-        """Load success criteria from criteria.txt."""
-        criteria_file = self.state_dir / "criteria.txt"
-        if criteria_file.exists():
-            return criteria_file.read_text()
-        return None
-
-    def save_plan(self, plan: str) -> None:
-        """Save task plan to plan.md."""
-        plan_file = self.state_dir / "plan.md"
-        plan_file.write_text(plan)
-
-    def load_plan(self) -> str | None:
-        """Load task plan from plan.md."""
-        plan_file = self.state_dir / "plan.md"
-        if plan_file.exists():
-            return plan_file.read_text()
-        return None
-
-    def save_progress(self, progress: str) -> None:
-        """Save progress summary to progress.md."""
-        progress_file = self.state_dir / "progress.md"
-        progress_file.write_text(progress)
-
-    def load_progress(self) -> str | None:
-        """Load progress summary from progress.md."""
-        progress_file = self.state_dir / "progress.md"
-        if progress_file.exists():
-            return progress_file.read_text()
-        return None
-
-    def save_context(self, context: str) -> None:
-        """Save accumulated context to context.md."""
-        context_file = self.state_dir / "context.md"
-        context_file.write_text(context)
-
-    def load_context(self) -> str:
-        """Load accumulated context from context.md."""
-        context_file = self.state_dir / "context.md"
-        if context_file.exists():
-            return context_file.read_text()
-        return ""
+    # File operations methods (save_goal, load_goal, save_criteria, load_criteria,
+    # save_plan, load_plan, save_progress, load_progress, save_context, load_context)
+    # are inherited from FileOperationsMixin
 
     def get_log_file(self, run_id: str) -> Path:
         """Get path to log file for run."""
@@ -658,196 +561,31 @@ class StateManager:
 
         return state
 
-    def _parse_plan_tasks(self, plan: str) -> list[str]:
-        """Parse tasks from plan markdown.
+    # _parse_plan_tasks is inherited from FileOperationsMixin
 
-        Args:
-            plan: The plan content in markdown format.
+    # PR Context Methods are inherited from PRContextMixin:
+    # - get_pr_dir(pr_number: int) -> Path
+    # - save_pr_comments(pr_number: int, comments: list[dict]) -> None
+    # - save_ci_failure(pr_number: int, check_name: str, logs: str) -> None
+    # - load_pr_context(pr_number: int) -> str
+    # - clear_pr_context(pr_number: int) -> None
 
-        Returns:
-            List of task descriptions extracted from the plan.
-        """
-        tasks = []
-        for line in plan.split("\n"):
-            # Look for markdown checkbox lines
-            stripped = line.strip()
-            if stripped.startswith("- [ ]") or stripped.startswith("- [x]"):
-                task = stripped[5:].strip()  # Remove "- [ ]" or "- [x]"
-                if task:
-                    tasks.append(task)
-        return tasks
+    # File Operations Methods are inherited from FileOperationsMixin:
+    # - save_goal(goal: str) -> None
+    # - load_goal() -> str
+    # - save_criteria(criteria: str) -> None
+    # - load_criteria() -> str | None
+    # - save_plan(plan: str) -> None
+    # - load_plan() -> str | None
+    # - save_progress(progress: str) -> None
+    # - load_progress() -> str | None
+    # - save_context(context: str) -> None
+    # - load_context() -> str
+    # - _parse_plan_tasks(plan: str) -> list[str]
 
-    def cleanup_on_success(self, run_id: str) -> None:
-        """Clean up all state files except logs on success."""
-        # Release session lock first
-        self.release_session_lock()
-
-        # Delete all files in state directory except logs/
-        for item in self.state_dir.iterdir():
-            if item.is_file():
-                item.unlink()
-            elif item.is_dir() and item != self.logs_dir:
-                shutil.rmtree(item)
-
-        # Keep only the last 10 log files
-        self._cleanup_old_logs(max_logs=10)
-
-    def _cleanup_old_logs(self, max_logs: int = 10) -> None:
-        """Keep only the most recent log files."""
-        if not self.logs_dir.exists():
-            return
-
-        # Get all log files sorted by modification time (newest first)
-        log_files = sorted(
-            self.logs_dir.glob("run-*.txt"), key=lambda p: p.stat().st_mtime, reverse=True
-        )
-
-        # Delete older logs
-        for log_file in log_files[max_logs:]:
-            log_file.unlink()
-
-    # =========================================================================
-    # PR Context Methods - Store PR info to help Claude understand context
-    # =========================================================================
-
-    def get_pr_dir(self, pr_number: int) -> Path:
-        """Get the directory for a specific PR's context.
-
-        Structure: .claude-task-master/debugging/pr/{number}/
-        """
-        pr_dir = self.state_dir / "debugging" / "pr" / str(pr_number)
-        pr_dir.mkdir(parents=True, exist_ok=True)
-        return pr_dir
-
-    def save_pr_comments(self, pr_number: int, comments: list[dict]) -> None:
-        """Save PR comments to files for Claude to read.
-
-        Each comment is saved to a separate file for easy reading.
-
-        Args:
-            pr_number: The PR number.
-            comments: List of comment dicts with author, path, line, body.
-        """
-        pr_dir = self.get_pr_dir(pr_number)
-        comments_dir = pr_dir / "comments"
-        comments_dir.mkdir(exist_ok=True)
-
-        # Clear old comments
-        for old_file in comments_dir.glob("*.txt"):
-            old_file.unlink()
-
-        # Save each comment to a separate file
-        for i, comment in enumerate(comments, 1):
-            thread_id = comment.get("thread_id", "")
-            comment_id = comment.get("comment_id", "")
-            author = comment.get("author", "unknown")
-            path = comment.get("path", "general")
-            line = comment.get("line", "N/A")
-            body = comment.get("body", "")
-            is_resolved = comment.get("is_resolved", False)
-
-            # Create filename from sanitized path
-            safe_path = path.replace("/", "_").replace("\\", "_") if path else "general"
-            # Sanitize line number (could be "N/A" or None)
-            safe_line = str(line).replace("/", "_").replace("\\", "_") if line else "0"
-            filename = f"{i:03d}_{safe_path}_L{safe_line}.txt"
-
-            content = f"""Thread ID: {thread_id}
-Comment ID: {comment_id}
-File: {path}
-Line: {line}
-Author: {author}
-Status: {"Resolved" if is_resolved else "Unresolved"}
-
-{body}
-"""
-            (comments_dir / filename).write_text(content)
-
-        # Also save a summary file
-        summary_file = pr_dir / "comments_summary.txt"
-        summary_lines = [
-            f"PR #{pr_number} Review Comments",
-            f"Total: {len(comments)} comments",
-            "",
-            "Files with comments:",
-        ]
-        paths = {c.get("path", "general") for c in comments}
-        for p in sorted(paths):
-            summary_lines.append(f"  - {p}")
-
-        summary_file.write_text("\n".join(summary_lines))
-
-    def save_ci_failure(self, pr_number: int, check_name: str, logs: str) -> None:
-        """Save CI failure logs for Claude to read.
-
-        Args:
-            pr_number: The PR number.
-            check_name: Name of the failing check.
-            logs: The failure logs.
-        """
-        pr_dir = self.get_pr_dir(pr_number)
-        ci_dir = pr_dir / "ci"
-        ci_dir.mkdir(exist_ok=True)
-
-        # Sanitize check name for filename
-        safe_name = check_name.replace("/", "_").replace("\\", "_").replace(" ", "_")
-        filename = f"failed_{safe_name}.txt"
-
-        content = f"""CI Check Failed: {check_name}
-PR: #{pr_number}
-
-{"=" * 60}
-FAILURE LOGS:
-{"=" * 60}
-
-{logs}
-"""
-        (ci_dir / filename).write_text(content)
-
-    def load_pr_context(self, pr_number: int) -> str:
-        """Load all PR context (comments + CI failures) as a single string.
-
-        This gives Claude all the context it needs to address issues.
-
-        Args:
-            pr_number: The PR number.
-
-        Returns:
-            Combined context string.
-        """
-        pr_dir = self.get_pr_dir(pr_number)
-        if not pr_dir.exists():
-            return ""
-
-        sections = []
-
-        # Load comments
-        comments_dir = pr_dir / "comments"
-        if comments_dir.exists():
-            comment_files = sorted(comments_dir.glob("*.txt"))
-            if comment_files:
-                sections.append("## Review Comments\n")
-                for cf in comment_files:
-                    sections.append(f"### {cf.stem}\n{cf.read_text()}\n")
-
-        # Load CI failures
-        ci_dir = pr_dir / "ci"
-        if ci_dir.exists():
-            ci_files = sorted(ci_dir.glob("failed_*.txt"))
-            if ci_files:
-                sections.append("## CI Failures\n")
-                for cf in ci_files:
-                    sections.append(cf.read_text())
-
-        return "\n".join(sections)
-
-    def clear_pr_context(self, pr_number: int) -> None:
-        """Clear PR context after PR is merged.
-
-        Args:
-            pr_number: The PR number.
-        """
-        # Use the same path structure as get_pr_dir
-        pr_dir = self.state_dir / "debugging" / "pr" / str(pr_number)
-        if pr_dir.exists():
-            shutil.rmtree(pr_dir)
+    # Backup/Recovery Methods are inherited from BackupRecoveryMixin:
+    # - _attempt_recovery(original_error: Exception) -> TaskState | None
+    # - _create_backup(file_path: Path, suffix: str = "") -> Path | None
+    # - create_state_backup() -> Path | None
+    # - cleanup_on_success(run_id: str) -> None
+    # - _cleanup_old_logs(max_logs: int = 10) -> None

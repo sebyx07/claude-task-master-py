@@ -320,7 +320,9 @@ Please complete this task."""
         if not tasks:
             return
 
-        current_task = tasks[state.current_task_index] if state.current_task_index < len(tasks) else ""
+        current_task = (
+            tasks[state.current_task_index] if state.current_task_index < len(tasks) else ""
+        )
 
         progress_lines = [
             "# Progress Tracker\n",
