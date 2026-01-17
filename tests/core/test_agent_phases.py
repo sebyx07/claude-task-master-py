@@ -178,97 +178,106 @@ class TestAgentWrapperGetToolsForPhase:
 
 
 # =============================================================================
-# AgentWrapper Prompt Building Tests
+# Prompt Building Tests (uses prompts module directly since methods were extracted)
 # =============================================================================
 
 
-class TestAgentWrapperPromptBuilding:
-    """Tests for prompt building methods."""
+class TestPromptBuilding:
+    """Tests for prompt building using centralized prompts module."""
 
-    @pytest.fixture
-    def agent(self):
-        """Create an AgentWrapper instance for testing."""
-        mock_sdk = MagicMock()
-        mock_sdk.query = AsyncMock()
-        mock_sdk.ClaudeAgentOptions = MagicMock()
+    def test_build_planning_prompt_includes_goal(self):
+        """Test build_planning_prompt includes the goal."""
+        from claude_task_master.core.prompts import build_planning_prompt
 
-        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
-            return AgentWrapper(
-                access_token="test-token",
-                model=ModelType.SONNET,
-            )
-
-    def test_build_planning_prompt_includes_goal(self, agent):
-        """Test _build_planning_prompt includes the goal."""
         goal = "Build a REST API"
-        prompt = agent._build_planning_prompt(goal, "")
+        prompt = build_planning_prompt(goal=goal, context=None)
 
         assert "Build a REST API" in prompt
 
-    def test_build_planning_prompt_includes_context(self, agent):
-        """Test _build_planning_prompt includes the context."""
+    def test_build_planning_prompt_includes_context(self):
+        """Test build_planning_prompt includes the context."""
+        from claude_task_master.core.prompts import build_planning_prompt
+
         context = "Previous session completed setup."
-        prompt = agent._build_planning_prompt("Test goal", context)
+        prompt = build_planning_prompt(goal="Test goal", context=context)
 
         assert "Previous session completed setup." in prompt
 
-    def test_build_planning_prompt_includes_task_list_format(self, agent):
-        """Test _build_planning_prompt includes task list format instructions."""
-        prompt = agent._build_planning_prompt("Test goal", "")
+    def test_build_planning_prompt_includes_task_list_format(self):
+        """Test build_planning_prompt includes task list format instructions."""
+        from claude_task_master.core.prompts import build_planning_prompt
+
+        prompt = build_planning_prompt(goal="Test goal", context=None)
 
         # Uses centralized prompts.py format
         assert "Create Task List" in prompt  # Step 2: Create Task List
         assert "- [ ]" in prompt
         assert "Success Criteria" in prompt
 
-    def test_build_planning_prompt_includes_exploration_instruction(self, agent):
-        """Test _build_planning_prompt includes exploration instruction."""
-        prompt = agent._build_planning_prompt("Test goal", "")
+    def test_build_planning_prompt_includes_exploration_instruction(self):
+        """Test build_planning_prompt includes exploration instruction."""
+        from claude_task_master.core.prompts import build_planning_prompt
+
+        prompt = build_planning_prompt(goal="Test goal", context=None)
 
         # Must explore codebase before creating tasks
         assert "Explore" in prompt
         assert "READ ONLY" in prompt or "Read" in prompt
 
-    def test_build_planning_prompt_mentions_tools(self, agent):
-        """Test _build_planning_prompt mentions available tools."""
-        prompt = agent._build_planning_prompt("Test goal", "")
+    def test_build_planning_prompt_mentions_tools(self):
+        """Test build_planning_prompt mentions available tools."""
+        from claude_task_master.core.prompts import build_planning_prompt
+
+        prompt = build_planning_prompt(goal="Test goal", context=None)
 
         assert "Read" in prompt
         assert "Glob" in prompt
         assert "Grep" in prompt
 
-    def test_build_work_prompt_includes_task(self, agent):
-        """Test _build_work_prompt includes the task description."""
+    def test_build_work_prompt_includes_task(self):
+        """Test build_work_prompt includes the task description."""
+        from claude_task_master.core.prompts import build_work_prompt
+
         task = "Implement user authentication"
-        prompt = agent._build_work_prompt(task, "", None)
+        prompt = build_work_prompt(task_description=task, context=None, pr_comments=None)
 
         assert "Implement user authentication" in prompt
 
-    def test_build_work_prompt_includes_context(self, agent):
-        """Test _build_work_prompt includes context."""
+    def test_build_work_prompt_includes_context(self):
+        """Test build_work_prompt includes context."""
+        from claude_task_master.core.prompts import build_work_prompt
+
         context = "Using FastAPI framework."
-        prompt = agent._build_work_prompt("Test task", context, None)
+        prompt = build_work_prompt(task_description="Test task", context=context, pr_comments=None)
 
         assert "Using FastAPI framework." in prompt
 
-    def test_build_work_prompt_includes_pr_comments(self, agent):
-        """Test _build_work_prompt includes PR comments when provided."""
+    def test_build_work_prompt_includes_pr_comments(self):
+        """Test build_work_prompt includes PR comments when provided."""
+        from claude_task_master.core.prompts import build_work_prompt
+
         pr_comments = "Please add error handling for edge cases."
-        prompt = agent._build_work_prompt("Test task", "", pr_comments)
+        prompt = build_work_prompt(
+            task_description="Test task", context=None, pr_comments=pr_comments
+        )
 
         # Uses centralized prompts.py format
         assert "PR Review Feedback" in prompt
         assert "Please add error handling for edge cases." in prompt
 
-    def test_build_work_prompt_without_pr_comments(self, agent):
-        """Test _build_work_prompt without PR comments."""
-        prompt = agent._build_work_prompt("Test task", "", None)
+    def test_build_work_prompt_without_pr_comments(self):
+        """Test build_work_prompt without PR comments."""
+        from claude_task_master.core.prompts import build_work_prompt
+
+        prompt = build_work_prompt(task_description="Test task", context=None, pr_comments=None)
 
         assert "PR Review Feedback" not in prompt
 
-    def test_build_work_prompt_mentions_tools(self, agent):
-        """Test _build_work_prompt mentions git and common commands."""
-        prompt = agent._build_work_prompt("Test task", "", None)
+    def test_build_work_prompt_mentions_tools(self):
+        """Test build_work_prompt mentions git and common commands."""
+        from claude_task_master.core.prompts import build_work_prompt
+
+        prompt = build_work_prompt(task_description="Test task", context=None, pr_comments=None)
 
         # Check for key workflow elements instead of tool names
         assert "git" in prompt
@@ -278,27 +287,28 @@ class TestAgentWrapperPromptBuilding:
 
 
 # =============================================================================
-# AgentWrapper Extract Methods Tests
+# AgentPhaseExecutor Extract Methods Tests
 # =============================================================================
 
 
-class TestAgentWrapperExtractMethods:
-    """Tests for plan/criteria extraction methods."""
+class TestAgentPhaseExecutorExtractMethods:
+    """Tests for plan/criteria extraction methods on AgentPhaseExecutor."""
 
     @pytest.fixture
-    def agent(self):
-        """Create an AgentWrapper instance for testing."""
-        mock_sdk = MagicMock()
-        mock_sdk.query = AsyncMock()
-        mock_sdk.ClaudeAgentOptions = MagicMock()
+    def phase_executor(self):
+        """Create an AgentPhaseExecutor instance for testing."""
+        from claude_task_master.core.agent_phases import AgentPhaseExecutor
 
-        with patch.dict("sys.modules", {"claude_agent_sdk": mock_sdk}):
-            return AgentWrapper(
-                access_token="test-token",
-                model=ModelType.SONNET,
-            )
+        # Create a mock query executor
+        mock_query_executor = MagicMock()
 
-    def test_extract_plan_with_proper_format(self, agent):
+        return AgentPhaseExecutor(
+            query_executor=mock_query_executor,
+            model=ModelType.SONNET,
+            logger=None,
+        )
+
+    def test_extract_plan_with_proper_format(self, phase_executor):
         """Test _extract_plan returns result with proper format."""
         result = """## Task List
 
@@ -309,18 +319,18 @@ class TestAgentWrapperExtractMethods:
 
 1. All tests pass
 """
-        extracted = agent._extract_plan(result)
+        extracted = phase_executor._extract_plan(result)
         assert extracted == result
 
-    def test_extract_plan_wraps_improper_format(self, agent):
+    def test_extract_plan_wraps_improper_format(self, phase_executor):
         """Test _extract_plan wraps result without proper format."""
         result = "Some unformatted content"
-        extracted = agent._extract_plan(result)
+        extracted = phase_executor._extract_plan(result)
 
         assert "## Task List" in extracted
         assert "Some unformatted content" in extracted
 
-    def test_extract_criteria_with_proper_format(self, agent):
+    def test_extract_criteria_with_proper_format(self, phase_executor):
         """Test _extract_criteria extracts criteria section."""
         result = """## Task List
 
@@ -331,26 +341,93 @@ class TestAgentWrapperExtractMethods:
 1. All tests pass
 2. Coverage > 80%
 """
-        extracted = agent._extract_criteria(result)
+        extracted = phase_executor._extract_criteria(result)
 
         assert "1. All tests pass" in extracted
         assert "2. Coverage > 80%" in extracted
 
-    def test_extract_criteria_without_criteria_section(self, agent):
+    def test_extract_criteria_without_criteria_section(self, phase_executor):
         """Test _extract_criteria returns default when no criteria section."""
         result = """## Task List
 
 - [ ] Task 1
 - [ ] Task 2
 """
-        extracted = agent._extract_criteria(result)
+        extracted = phase_executor._extract_criteria(result)
 
         assert "All tasks in the task list are completed successfully." in extracted
 
-    def test_extract_criteria_empty_result(self, agent):
+    def test_extract_criteria_empty_result(self, phase_executor):
         """Test _extract_criteria with empty result."""
-        extracted = agent._extract_criteria("")
+        extracted = phase_executor._extract_criteria("")
         assert "All tasks in the task list are completed successfully." in extracted
+
+
+# =============================================================================
+# AgentPhaseExecutor Parse Verification Result Tests
+# =============================================================================
+
+
+class TestAgentPhaseExecutorParseVerificationResult:
+    """Tests for verification result parsing on AgentPhaseExecutor."""
+
+    @pytest.fixture
+    def phase_executor(self):
+        """Create an AgentPhaseExecutor instance for testing."""
+        from claude_task_master.core.agent_phases import AgentPhaseExecutor
+
+        mock_query_executor = MagicMock()
+
+        return AgentPhaseExecutor(
+            query_executor=mock_query_executor,
+            model=ModelType.SONNET,
+            logger=None,
+        )
+
+    def test_parse_explicit_pass_marker(self, phase_executor):
+        """Test parsing explicit VERIFICATION_RESULT: PASS marker."""
+        result = "Some details... VERIFICATION_RESULT: PASS"
+        assert phase_executor._parse_verification_result(result) is True
+
+    def test_parse_explicit_fail_marker(self, phase_executor):
+        """Test parsing explicit VERIFICATION_RESULT: FAIL marker."""
+        result = "Some details... VERIFICATION_RESULT: FAIL"
+        assert phase_executor._parse_verification_result(result) is False
+
+    def test_parse_all_criteria_met(self, phase_executor):
+        """Test parsing 'all criteria met' indicator."""
+        result = "All criteria met successfully"
+        assert phase_executor._parse_verification_result(result) is True
+
+    def test_parse_overall_success_yes(self, phase_executor):
+        """Test parsing 'Overall Success: YES' indicator."""
+        result = "Overall Success: YES"
+        assert phase_executor._parse_verification_result(result) is True
+
+    def test_parse_overall_success_no(self, phase_executor):
+        """Test parsing 'Overall Success: NO' indicator (should fail)."""
+        result = "Overall Success: NO"
+        assert phase_executor._parse_verification_result(result) is False
+
+    def test_parse_criteria_not_met(self, phase_executor):
+        """Test parsing 'criteria not met' indicator."""
+        result = "Some criteria not met"
+        assert phase_executor._parse_verification_result(result) is False
+
+    def test_parse_verification_failed(self, phase_executor):
+        """Test parsing 'verification failed' indicator."""
+        result = "Verification failed due to errors"
+        assert phase_executor._parse_verification_result(result) is False
+
+    def test_parse_generic_success(self, phase_executor):
+        """Test parsing generic 'success' indicator."""
+        result = "Implementation is a success"
+        assert phase_executor._parse_verification_result(result) is True
+
+    def test_parse_negative_overrides_positive(self, phase_executor):
+        """Test negative indicators override positive ones."""
+        result = "Success noted but criteria not met"
+        assert phase_executor._parse_verification_result(result) is False
 
 
 # =============================================================================

@@ -5,7 +5,6 @@ verification phases. For multi-turn conversations within task groups,
 see the `conversation` module which uses `ClaudeSDKClient`.
 """
 
-import asyncio
 from typing import TYPE_CHECKING, Any
 
 from . import console
@@ -18,12 +17,12 @@ from .agent_models import (
     TaskComplexity,
     ToolConfig,
 )
+from .agent_phases import AgentPhaseExecutor
 from .agent_query import AgentQueryExecutor
 from .circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
 )
-from .prompts import build_planning_prompt, build_verification_prompt, build_work_prompt
 from .rate_limit import RateLimitConfig
 from .subagents import get_agents_for_working_dir
 
@@ -103,6 +102,16 @@ class AgentWrapper:
             logger=self.logger,
         )
 
+        # Initialize phase executor (delegated for SRP)
+        self._phase_executor = AgentPhaseExecutor(
+            query_executor=self._query_executor,
+            model=self.model,
+            logger=self.logger,
+            get_model_name_func=self._get_model_name,
+            get_agents_func=get_agents_for_working_dir,
+            process_message_func=self._process_message,
+        )
+
         # Note: The Claude Agent SDK will automatically use credentials from
         # ~/.claude/.credentials.json if no ANTHROPIC_API_KEY is set
 
@@ -161,28 +170,10 @@ class AgentWrapper:
 
         Always uses Opus (smartest model) for planning to ensure
         high-quality task breakdown and complexity classification.
+
+        Delegates to AgentPhaseExecutor for implementation.
         """
-        # Build prompt for planning
-        prompt = self._build_planning_prompt(goal, context)
-
-        # Always use Opus for planning (smartest model)
-        console.info("Planning with Opus (smartest model)...")
-
-        # Run async query with Opus override
-        result = asyncio.run(
-            self._run_query(
-                prompt=prompt,
-                tools=self.get_tools_for_phase("planning"),
-                model_override=ModelType.OPUS,  # Always use Opus for planning
-            )
-        )
-
-        # Parse result to extract plan and criteria
-        return {
-            "plan": self._extract_plan(result),
-            "criteria": self._extract_criteria(result),
-            "raw_output": result,
-        }
+        return self._phase_executor.run_planning_phase(goal, context)
 
     def run_work_session(
         self,
@@ -207,88 +198,29 @@ class AgentWrapper:
             pr_group_info: Optional dict with PR group context (name, completed_tasks, etc).
 
         Returns:
-            Dict with 'output' and 'success' keys.
+            Dict with 'output', 'success', and 'model_used' keys.
+
+        Delegates to AgentPhaseExecutor for implementation.
         """
-        # Build prompt for work session
-        prompt = self._build_work_prompt(
-            task_description, context, pr_comments, required_branch, create_pr, pr_group_info
+        return self._phase_executor.run_work_session(
+            task_description=task_description,
+            context=context,
+            pr_comments=pr_comments,
+            model_override=model_override,
+            required_branch=required_branch,
+            create_pr=create_pr,
+            pr_group_info=pr_group_info,
         )
-
-        # Run async query with optional model override
-        result = asyncio.run(
-            self._run_query(
-                prompt=prompt,
-                tools=self.get_tools_for_phase("working"),
-                model_override=model_override,
-            )
-        )
-
-        return {
-            "output": result,
-            "success": True,  # For MVP, assume success
-            "model_used": (model_override or self.model).value,
-        }
 
     def verify_success_criteria(self, criteria: str, context: str = "") -> dict[str, Any]:
         """Verify if success criteria are met.
 
         Uses verification tools (Read, Glob, Grep, Bash) to actually run tests
         and lint checks as specified in the verification prompt.
+
+        Delegates to AgentPhaseExecutor for implementation.
         """
-        # Build prompt using centralized prompts module
-        prompt = build_verification_prompt(criteria=criteria, tasks_summary=context)
-
-        # Run async query with verification tools (read + bash for running tests)
-        result = asyncio.run(
-            self._run_query(
-                prompt=prompt,
-                tools=self.get_tools_for_phase("verification"),
-            )
-        )
-
-        # Parse the verification result - look for explicit PASS/FAIL marker
-        result_lower = result.lower()
-
-        # Look for our explicit marker first
-        if "verification_result: pass" in result_lower:
-            success = True
-        elif "verification_result: fail" in result_lower:
-            success = False
-        else:
-            # Fallback: check for clear negative vs positive indicators
-            # The key issue is catching "Overall Success: NO" while still
-            # detecting genuine success
-            negative_indicators = [
-                "not met",
-                "not all criteria",
-                "criteria not met",
-                "overall success: no",
-                "criteria not satisfied",
-                "verification failed",
-                "cannot verify",
-            ]
-            positive_indicators = [
-                "all criteria met",
-                "all criteria verified",
-                "overall success: yes",
-                "verification successful",
-                "success",  # Generic success indicator
-            ]
-
-            # Check for negative indicators first (these are disqualifying)
-            has_negative = any(ind in result_lower for ind in negative_indicators)
-
-            # Check for positive indicators
-            has_positive = any(ind in result_lower for ind in positive_indicators)
-
-            # Succeed if we have positive indicators without clear negatives
-            # The key fix: "Overall Success: NO" will trigger has_negative
-            success = has_positive and not has_negative
-
-        return {
-            "success": success,
-            "details": result,
-        }
+        return self._phase_executor.verify_success_criteria(criteria, context)
 
     async def _run_query(
         self, prompt: str, tools: list[str], model_override: ModelType | None = None
@@ -447,51 +379,3 @@ class AgentWrapper:
         }
         return model_map.get(target_model, "claude-sonnet-4-5-20250929")
 
-    def _build_planning_prompt(self, goal: str, context: str) -> str:
-        """Build prompt for planning phase.
-
-        Delegates to centralized prompts module for maintainability.
-        """
-        return build_planning_prompt(goal=goal, context=context if context else None)
-
-    def _build_work_prompt(
-        self,
-        task_description: str,
-        context: str,
-        pr_comments: str | None,
-        required_branch: str | None = None,
-        create_pr: bool = True,
-        pr_group_info: dict | None = None,
-    ) -> str:
-        """Build prompt for work session.
-
-        Delegates to centralized prompts module for maintainability.
-        """
-        return build_work_prompt(
-            task_description=task_description,
-            context=context if context else None,
-            pr_comments=pr_comments,
-            required_branch=required_branch,
-            create_pr=create_pr,
-            pr_group_info=pr_group_info,
-        )
-
-    def _extract_plan(self, result: str) -> str:
-        """Extract task list from planning result."""
-        # For MVP, return the full result - we'll parse later
-        if "## Task List" in result:
-            return result
-
-        # If no proper format, wrap it
-        return f"## Task List\n\n{result}"
-
-    def _extract_criteria(self, result: str) -> str:
-        """Extract success criteria from planning result."""
-        # Look for success criteria section
-        if "## Success Criteria" in result:
-            parts = result.split("## Success Criteria")
-            if len(parts) > 1:
-                return parts[1].strip()
-
-        # Default criteria if none specified
-        return "All tasks in the task list are completed successfully."
