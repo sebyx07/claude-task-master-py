@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from .state import WorkflowStageType
 
 if TYPE_CHECKING:
-    from ..github.client import GitHubClient
+    from ..github import GitHubClient
     from .state import TaskState
 
 
@@ -37,7 +37,7 @@ class StateRecovery:
     def github_client(self) -> GitHubClient:
         """Get or lazily initialize GitHub client."""
         if self._github_client is None:
-            from ..github.client import GitHubClient
+            from ..github import GitHubClient
 
             self._github_client = GitHubClient()
         return self._github_client

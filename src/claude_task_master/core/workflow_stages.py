@@ -12,7 +12,7 @@ from .agent import ModelType
 from .shutdown import interruptible_sleep
 
 if TYPE_CHECKING:
-    from ..github.client import GitHubClient
+    from ..github import GitHubClient
     from .agent import AgentWrapper
     from .orchestrator import TaskState
     from .pr_context import PRContextManager

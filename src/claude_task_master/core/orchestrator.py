@@ -29,7 +29,7 @@ from .task_runner import (
 from .workflow_stages import WorkflowStageHandler
 
 if TYPE_CHECKING:
-    from ..github.client import GitHubClient
+    from ..github import GitHubClient
     from .logger import TaskLogger
 
 # =============================================================================
@@ -131,7 +131,7 @@ class WorkLoopOrchestrator:
         """Get or lazily initialize GitHub client."""
         if self._github_client is None:
             try:
-                from ..github.client import GitHubClient
+                from ..github import GitHubClient
 
                 self._github_client = GitHubClient()
             except Exception as e:

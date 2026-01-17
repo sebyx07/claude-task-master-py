@@ -3,7 +3,7 @@
 import typer
 from rich.console import Console
 
-from ..github.client import GitHubClient
+from ..github import GitHubClient
 
 console = Console()
 

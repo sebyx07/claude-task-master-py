@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from . import console
 
 if TYPE_CHECKING:
-    from ..github.client import GitHubClient
+    from ..github import GitHubClient
     from .state import StateManager
 
 
