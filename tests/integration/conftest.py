@@ -782,7 +782,6 @@ def patch_github_client_globally(mock_github_client):
         yield
 
 
-
 @pytest.fixture
 def mock_agent_wrapper(mock_sdk: MockClaudeAgentSDK):
     """Provide a mock AgentWrapper for integration tests."""
