@@ -167,15 +167,28 @@ You just need to OUTPUT the plan as TEXT in your response.
 Understand the architecture before creating tasks.""",
     )
 
-    # Task creation phase
+    # Task creation phase - organized by PR
     builder.add_section(
-        "Step 2: Create Task List",
-        """Create an atomic, testable task list using this format:
+        "Step 2: Create Task List (Organized by PR)",
+        """**CRITICAL: Organize tasks into PRs (Pull Requests).**
+
+Each PR groups related tasks that share context. Tasks in the same PR will be
+executed in a continuous conversation, so Claude remembers previous work.
+
+**Format (use ### PR N: Title):**
 
 ```markdown
-- [ ] `[coding]` Add `calculate_total()` method to `src/cart/service.py:CartService`
-- [ ] `[quick]` Fix typo in `src/config.py` line 42
-- [ ] `[general]` Add tests for `CartService` in `tests/test_cart.py`
+### PR 1: Schema & Model Fixes (Prerequisites)
+
+- [ ] `[coding]` Create migration to make `user_id` nullable in `rails/db/migrate/`
+- [ ] `[coding]` Update `Shift` model in `rails/app/models/shift.rb`
+- [ ] `[quick]` Update `rails/spec/factories/shifts.rb` to add `:unassigned` trait
+
+### PR 2: Service Layer Fixes
+
+- [ ] `[coding]` Fix `EmployeeDashboardService` in `rails/app/services/dashboards/`
+- [ ] `[coding]` Fix `AdminDashboardService` spec in `rails/spec/services/dashboards/`
+- [ ] `[general]` Run full test suite and fix any failures
 ```
 
 **IMPORTANT: Include file paths and symbols in EVERY task:**
@@ -190,30 +203,42 @@ Understand the architecture before creating tasks.""",
 
 **When uncertain, use `[coding]`.**
 
-**Task principles:**
-- Atomic: One PR-able unit of work per task
-- Ordered: Dependencies first
-- Grouped: Related tasks for same PR
-- Specific: Include exact file paths and symbol names
-
-**Include git branch creation as first task:**
-```markdown
-- [ ] `[quick]` Create feature branch: claudetm/feat/your-feature-name
-```""",
+**PR grouping principles:**
+- **Dependencies first**: Schema changes before service changes
+- **Logical cohesion**: Related changes in same PR
+- **Small PRs**: 3-6 tasks per PR (easier to review)
+- **Include branch creation**: First task of first PR creates the branch""",
     )
 
     # PR strategy
     builder.add_section(
         "PR Strategy",
-        """Group related tasks into focused PRs:
+        """**Why PRs matter:**
+- Tasks in same PR share a conversation (faster, better context)
+- Each PR gets its own branch and CI check
+- Small, focused PRs are easier to review and merge
+
+**Example PR breakdown for a feature:**
 
 ```markdown
-- [ ] `[quick]` Create feature branch
-- [ ] `[coding]` Implement feature X core logic
-- [ ] `[general]` Add tests for feature X
-- [ ] `[quick]` Update docs
-- [ ] `[general]` Create PR, wait for CI, merge
-```""",
+### PR 1: Database Layer (create feature branch here)
+
+- [ ] `[quick]` Create feature branch: claudetm/feat/your-feature-name
+- [ ] `[coding]` Add migration for new table
+- [ ] `[coding]` Create model with validations
+
+### PR 2: Business Logic
+
+- [ ] `[coding]` Implement service class
+- [ ] `[general]` Add service tests
+
+### PR 3: API Layer
+
+- [ ] `[coding]` Add controller endpoints
+- [ ] `[general]` Add API tests
+```
+
+**Each PR should be mergeable independently when possible.**""",
     )
 
     # Success criteria
@@ -286,7 +311,9 @@ def build_work_prompt(
     if required_branch:
         branch_info = f"\n\n**Current Branch:** `{required_branch}`"
         if required_branch in ("main", "master"):
-            branch_info += "\n⚠️ You are on main/master - create a feature branch before making changes!"
+            branch_info += (
+                "\n⚠️ You are on main/master - create a feature branch before making changes!"
+            )
 
     builder = PromptBuilder(
         intro=f"""You are Claude Task Master executing a SINGLE task.
@@ -388,7 +415,12 @@ gh pr create --title "type: description" --body "..." --label "claudetm"
 - ❌ Monitor PR status
 - ❌ Merge the PR
 
-**The orchestrator handles CI/reviews/merge automatically.**""",
+**The orchestrator handles CI/reviews/merge automatically.**
+
+**8. Log File Best Practices**
+- For log/progress files, use APPEND mode (don't read entire file)
+- Example: `echo "message" >> progress.md` instead of Read + Write
+- This avoids context bloat from reading large log files""",
     )
 
     # Completion summary

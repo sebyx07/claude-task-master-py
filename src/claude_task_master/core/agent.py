@@ -1,4 +1,9 @@
-"""Agent Wrapper - Encapsulates all Claude Agent SDK interactions."""
+"""Agent Wrapper - Encapsulates all Claude Agent SDK interactions.
+
+This module provides single-turn queries via `query()` for planning and
+verification phases. For multi-turn conversations within task groups,
+see the `conversation` module which uses `ClaudeSDKClient`.
+"""
 
 import asyncio
 import os

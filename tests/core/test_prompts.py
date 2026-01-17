@@ -150,7 +150,8 @@ class TestBuildPlanningPrompt:
         prompt = build_planning_prompt("Any goal")
 
         assert "PR Strategy" in prompt
-        assert "gh pr create" in prompt or "Create PR" in prompt
+        assert "### PR 1:" in prompt or "### PR N:" in prompt  # PR format examples
+        assert "PRs merged" in prompt  # PR in success criteria
 
     def test_includes_stop_instruction(self) -> None:
         """Test STOP instruction is included."""

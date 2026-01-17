@@ -160,14 +160,13 @@ class WorkflowStageHandler:
                     console.warning(
                         f"CI has failures but {pr_status.checks_pending} checks still pending..."
                     )
-                    console.detail(f"Waiting for all checks to complete...")
+                    console.detail("Waiting for all checks to complete...")
                     if not interruptible_sleep(self.CI_POLL_INTERVAL):
                         return None
                     return None  # Retry on next cycle
 
                 console.warning(
-                    f"CI failed: {pr_status.checks_failed} failed, "
-                    f"{pr_status.checks_passed} passed"
+                    f"CI failed: {pr_status.checks_failed} failed, {pr_status.checks_passed} passed"
                 )
                 for check in pr_status.check_details:
                     conclusion = (check.get("conclusion") or "").upper()
