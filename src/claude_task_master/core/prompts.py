@@ -350,10 +350,20 @@ def build_work_prompt(
 {pr_comments}
 
 **For each comment:**
-1. Make the requested change, or
-2. Explain why it's not needed
-3. Run tests after changes
-4. Commit referencing the feedback""",
+
+1. **Explore thoroughly first** - Read the relevant files and understand the context
+   before making any changes. Don't rush to implement.
+
+2. **If you agree** - Make the requested change, run tests, and commit.
+
+3. **If you disagree** - Do NOT implement the change. Instead:
+   - Explain your reasoning clearly and respectfully
+   - Provide technical justification for your approach
+   - This helps the reviewer learn and understand your perspective
+   - The reviewer can then decide whether to push back or accept
+
+4. Run tests after any changes
+5. Commit referencing the feedback""",
         )
 
     # Execution guidelines
@@ -403,11 +413,18 @@ EOF
 )"
 ```
 
-**7. Push and Create PR** (if task requires it)
+**Note:** The `.claude-task-master/` directory is automatically gitignored - it contains
+orchestrator state files that should never be committed.
+
+**7. Push and Create PR** (REQUIRED)
 ```bash
 git push -u origin HEAD
-gh pr create --title "type: description" --body "..." --label "claudetm"
+gh pr create --title "[claudetm] type: description" --body "..." --label "claudetm" 2>/dev/null || echo "PR exists"
 ```
+
+**PR title format:** `[claudetm] type: Brief description`
+
+⚠️ **Your work is NOT done until pushed and in a PR!**
 
 **STOP AFTER PR CREATION - DO NOT:**
 - ❌ Wait for CI (`sleep`, `watch`, polling)
@@ -428,17 +445,28 @@ gh pr create --title "type: description" --body "..." --label "claudetm"
         "On Completion - STOP",
         """**After completing THIS task, STOP.**
 
-**IMPORTANT: Always commit your work before reporting completion.**
+**IMPORTANT: Always commit, push, and create a PR before reporting completion.**
+
 ```bash
+# 1. Commit your changes (.claude-task-master/ is auto-gitignored)
 git add -A && git commit -m "task: Brief description of what was done"
+
+# 2. Push to remote
+git push -u origin HEAD
+
+# 3. Create PR if one doesn't exist for this branch
+gh pr create --title "type: description" --body "..." --label "claudetm" 2>/dev/null || echo "PR already exists"
 ```
+
+**Your work is NOT complete until it is pushed and in a PR.**
 
 Report:
 1. What was completed
 2. Tests run and results
 3. Files modified
 4. Commit hash (REQUIRED - must have committed)
-5. Any blockers
+5. PR URL (REQUIRED - must be pushed and in PR)
+6. Any blockers
 
 End your response with:
 ```

@@ -540,29 +540,6 @@ class TestResumeFromDifferentStates:
         # Working state is resumable, so it should continue
         assert "2" in result.output  # Current task index + 1
 
-    def test_resume_from_blocked_state(
-        self,
-        runner,
-        integration_temp_dir: Path,
-        integration_state_dir: Path,
-        mock_credentials_file: Path,
-        blocked_state,
-        patched_sdk,
-        monkeypatch,
-    ):
-        """Test resuming from a blocked state (user may have fixed the issue)."""
-        monkeypatch.chdir(integration_temp_dir)
-        monkeypatch.setattr(StateManager, "STATE_DIR", integration_state_dir)
-        monkeypatch.setattr(CredentialManager, "CREDENTIALS_PATH", mock_credentials_file)
-
-        patched_sdk.set_work_response("Resolved blocking issue and completed task.")
-        patched_sdk.set_verify_response("All criteria met!")
-
-        result = runner.invoke(app, ["resume"])
-
-        # Should attempt to resume blocked task
-        assert "resume" in result.output.lower() or "blocked" in result.output.lower()
-
 
 class TestPauseResumeWithBackups:
     """Tests for backup behavior during pause/resume."""

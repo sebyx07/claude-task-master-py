@@ -8,17 +8,65 @@
 
 Autonomous task orchestration system that keeps Claude working until a goal is achieved.
 
+## Quick Start
+
+```bash
+# Install
+pip install claude-task-master
+
+# Verify setup
+claudetm doctor
+
+# Run a task
+cd your-project
+claudetm start "Add user authentication with tests"
+```
+
 ## Overview
 
-Claude Task Master uses the Claude Agent SDK to autonomously work on complex tasks by:
+Claude Task Master uses the Claude Agent SDK to autonomously work on complex tasks. Give it a goal, and it will:
 
-- Breaking down goals into actionable task lists
-- Executing tasks using appropriate tools (Read, Write, Edit, Bash, etc.)
-- Creating and managing GitHub pull requests
-- Waiting for CI checks and addressing review comments
-- Iterating until all tasks are complete and success criteria are met
+1. **Plan** - Analyze codebase and create a task list organized by PRs
+2. **Execute** - Work through each task, committing and pushing changes
+3. **Create PRs** - All work is pushed and submitted as pull requests
+4. **Handle CI** - Wait for checks, fix failures, address review comments
+5. **Merge** - Auto-merge when approved (configurable)
+6. **Verify** - Confirm all success criteria are met
 
-**Core Philosophy**: Claude is smart enough to do the work AND verify its own work. The task master just keeps the loop going and persists state between sessions.
+**Core Philosophy**: Claude is smart enough to do the work AND verify it. Task Master keeps the loop going and persists state between sessions.
+
+## Workflow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         PLANNING                                 │
+│  Read codebase → Create task list → Define success criteria     │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                      WORKING (per task)                          │
+│  Make changes → Run tests → Commit → Push → Create PR           │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                       PR LIFECYCLE                               │
+│  Wait for CI → Fix failures → Address reviews → Merge           │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                       VERIFICATION                               │
+│  Run tests → Check lint → Verify criteria → Done                │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Work Completion Requirements
+
+Every task must be:
+- **Committed** with a descriptive message
+- **Pushed** to remote (`git push -u origin HEAD`)
+- **In a PR** (`gh pr create ...`)
+
+Work is NOT complete until it's pushed and in a pull request.
 
 ## Installation
 
@@ -83,49 +131,49 @@ This checks for:
 
 ## Usage
 
-### Start a new task
+### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `claudetm start "goal"` | Start a new task |
+| `claudetm resume` | Resume a paused task |
+| `claudetm status` | Show current status |
+| `claudetm plan` | View task list |
+| `claudetm progress` | View progress summary |
+| `claudetm context` | View accumulated learnings |
+| `claudetm logs` | View session logs |
+| `claudetm pr` | Show PR status and CI checks |
+| `claudetm comments` | Show review comments |
+| `claudetm clean` | Clean up task state |
+| `claudetm doctor` | Verify system setup |
+
+### Start Options
 
 ```bash
-# With uv
-uv run claudetm start "Your goal here"
-
-# Or if installed
-claudetm start "Your goal here"
+claudetm start "Your goal here" [OPTIONS]
 ```
 
-Options:
-- `--model`: Choose model (sonnet, opus, haiku) - default: sonnet
-- `--auto-merge/--no-auto-merge`: Auto-merge PRs when ready - default: True
-- `--max-sessions`: Limit number of sessions
-- `--pause-on-pr`: Pause after creating PR for manual review
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--model` | Model to use (sonnet, opus, haiku) | sonnet |
+| `--auto-merge/--no-auto-merge` | Auto-merge PRs when ready | True |
+| `--max-sessions` | Limit number of sessions | unlimited |
+| `--pause-on-pr` | Pause after creating PR | False |
 
-### Resume a paused task
-
-```bash
-claudetm resume
-```
-
-### Check status
+### Common Workflows
 
 ```bash
-claudetm status    # Current status
-claudetm plan      # View task list
-claudetm progress  # Progress summary
-claudetm logs      # View logs
-claudetm context   # View accumulated learnings
-```
+# Simple task with auto-merge
+claudetm start "Add factorial function to utils.py with tests"
 
-### PR management
+# Complex task with manual review
+claudetm start "Refactor auth system" --model opus --no-auto-merge
 
-```bash
-claudetm pr         # Show PR status and CI checks
-claudetm comments   # Show review comments
-```
+# Limited sessions to prevent runaway
+claudetm start "Fix bug in parser" --max-sessions 5
 
-### Cleanup
-
-```bash
-claudetm clean      # Clean up task state
+# Monitor progress
+watch -n 5 'claudetm status'
 ```
 
 ## Examples & Use Cases
@@ -289,15 +337,26 @@ claudetm context
 
 The system follows SOLID principles with strict Single Responsibility:
 
-- **Credential Manager**: OAuth credential loading and refresh
-- **State Manager**: All persistence to `.claude-task-master/` directory
-- **Agent Wrapper**: Claude Agent SDK interactions
-- **Planner**: Initial planning phase with read-only tools
-- **Work Loop Orchestrator**: Main execution loop
-- **GitHub Integration**: PR creation, CI monitoring, comment handling
-- **PR Cycle Manager**: Full PR lifecycle management
-- **Logger**: Consolidated logging per run
-- **Context Accumulator**: Builds learnings across sessions
+### Core Components
+
+| Component | Responsibility |
+|-----------|----------------|
+| **Credential Manager** | OAuth credential loading from `~/.claude/.credentials.json` |
+| **State Manager** | Persistence to `.claude-task-master/` directory |
+| **Agent Wrapper** | Claude Agent SDK interactions with streaming output |
+| **Planner** | Planning phase with read-only tools (Read, Glob, Grep, Bash) |
+| **Orchestrator** | Main execution loop and workflow stage management |
+| **GitHub Client** | PR creation, CI monitoring, comment handling |
+| **PR Cycle Manager** | Full PR lifecycle (create → CI → reviews → merge) |
+| **Context Accumulator** | Builds learnings across sessions |
+
+### Workflow Stages
+
+```
+working → pr_created → waiting_ci → ci_failed → waiting_reviews → addressing_reviews → ready_to_merge → merged
+```
+
+Each stage has specific handlers that determine when to transition to the next stage.
 
 ## State Directory
 
