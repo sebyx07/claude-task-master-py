@@ -226,9 +226,9 @@ class StateManager(PRContextMixin, FileOperationsMixin, BackupRecoveryMixin):
                     if pid == os.getpid():
                         self._pid_file.unlink()
                 except (ValueError, OSError):
-                    pass
+                    pass  # Ignore errors reading own PID - will be cleaned up
         except OSError:
-            pass
+            pass  # Ignore errors when PID file doesn't exist
 
     def is_session_active(self) -> bool:
         """Check if another session is actively using this state.
@@ -249,7 +249,7 @@ class StateManager(PRContextMixin, FileOperationsMixin, BackupRecoveryMixin):
             try:
                 self._pid_file.unlink()
             except OSError:
-                pass
+                pass  # Stale PID file cleanup is best-effort
             return False
 
     def is_safe_to_delete(self) -> bool:
@@ -446,7 +446,7 @@ class StateManager(PRContextMixin, FileOperationsMixin, BackupRecoveryMixin):
             try:
                 Path(temp_path).unlink()
             except Exception:
-                pass
+                pass  # Temp file cleanup is best-effort
             raise
 
     # Backup/recovery methods (_attempt_recovery, _create_backup, create_state_backup,

@@ -106,10 +106,8 @@ class TestCircuitBreaker:
 
         # Cause failures
         for _ in range(2):
-            try:
+            with pytest.raises(ValueError):
                 cb.call(lambda: (_ for _ in ()).throw(ValueError()))
-            except ValueError:
-                pass
 
         assert cb.state == CircuitState.OPEN
 
@@ -119,10 +117,8 @@ class TestCircuitBreaker:
         cb = CircuitBreaker(name="test", config=config)
 
         # Open the circuit
-        try:
+        with pytest.raises(ValueError):
             cb.call(lambda: (_ for _ in ()).throw(ValueError()))
-        except ValueError:
-            pass
 
         with pytest.raises(CircuitBreakerError):
             cb.call(lambda: "test")
@@ -153,10 +149,8 @@ class TestCircuitBreaker:
         cb = CircuitBreaker(name="test", config=config)
 
         # Open the circuit
-        try:
+        with pytest.raises(ValueError):
             cb.call(lambda: (_ for _ in ()).throw(ValueError()))
-        except ValueError:
-            pass
 
         assert cb.state == CircuitState.OPEN
 
@@ -196,10 +190,8 @@ class TestCircuitBreaker:
         cb = CircuitBreaker(name="test", config=config)
 
         # Open the circuit
-        try:
+        with pytest.raises(ValueError):
             cb.call(lambda: (_ for _ in ()).throw(ValueError()))
-        except ValueError:
-            pass
 
         # Should have time remaining
         assert cb.time_until_retry > 0

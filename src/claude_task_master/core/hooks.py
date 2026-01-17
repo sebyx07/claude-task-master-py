@@ -43,7 +43,7 @@ class HookCallback(Protocol):
         Returns:
             Hook output dictionary. Return {} to allow operation unchanged.
         """
-        ...
+        raise NotImplementedError("Protocol method must be implemented")
 
 
 @dataclass
