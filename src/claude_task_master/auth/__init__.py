@@ -34,6 +34,7 @@ Example:
 
 from claude_task_master.auth.password import (
     AuthenticationError,
+    InvalidPasswordError,
     PasswordNotConfiguredError,
     authenticate,
     get_password_from_env,
@@ -77,6 +78,7 @@ __all__ = [
     "is_auth_enabled",
     # Exceptions
     "AuthenticationError",
+    "InvalidPasswordError",
     "PasswordNotConfiguredError",
     # Middleware (requires [api] extra)
     "PasswordAuthMiddleware",

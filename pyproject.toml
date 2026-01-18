@@ -48,6 +48,7 @@ api = [
     # Note: passlib (last release: 1.7.4, Oct 2020) is unmaintained but has no known CVEs.
     # It's widely used and bcrypt is timing-safe. Consider argon2-cffi as future alternative.
     "passlib[bcrypt]>=1.7.4",
+    "bcrypt>=4.0.0,<4.1.0",  # Pin bcrypt for passlib compatibility
 ]
 dev = [
     "claude-task-master[api]",  # Include API dependencies for testing
