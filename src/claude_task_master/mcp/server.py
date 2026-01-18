@@ -491,8 +491,10 @@ def run_server(
     Security:
         For network transports (sse, streamable-http):
         - Defaults to localhost binding for security
-        - Set CLAUDETM_PASSWORD or CLAUDETM_PASSWORD_HASH to enable authentication
-        - When binding to non-localhost addresses, authentication is strongly recommended
+        - ⚠️  AUTHENTICATION REQUIRED: Set CLAUDETM_PASSWORD or CLAUDETM_PASSWORD_HASH to enable password-based authentication
+        - Clients must provide password as Bearer token: Authorization: Bearer <password>
+        - When binding to non-localhost addresses, authentication is REQUIRED for security
+        - Default authentication is disabled - must be explicitly enabled via CLAUDETM_PASSWORD env var or --password CLI arg
     """
     import anyio
 
