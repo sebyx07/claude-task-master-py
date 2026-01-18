@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "claude-task-master"
-version = "0.1.0"
+version = "0.1.1"
 description = "Autonomous task orchestration system that keeps Claude working until a goal is achieved"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -63,17 +63,16 @@ claudetm-py = "claude_task_master.cli:app"
 claudetm-mcp = "claude_task_master.mcp.server:main"
 
 # Setuptools configuration
-# Include the bash wrapper script for installation
-# This script wraps the Python CLI to load config.json and set env vars
-[tool.setuptools]
-script-files = ["bin/claudetm"]
-
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["claude_task_master*"]
 
 [tool.setuptools.package-dir]
 "" = "src"
+
+# Include bash wrapper script as package data
+[tool.setuptools.package-data]
+claude_task_master = ["bin/claudetm"]
 
 [tool.ruff]
 line-length = 100
