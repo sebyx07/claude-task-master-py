@@ -19,7 +19,9 @@ if TYPE_CHECKING:
 # =============================================================================
 
 # Define valid status values
-VALID_STATUSES = frozenset(["planning", "working", "blocked", "paused", "success", "failed"])
+VALID_STATUSES = frozenset(
+    ["planning", "working", "blocked", "paused", "stopped", "success", "failed"]
+)
 
 # Define workflow stages for PR lifecycle
 WORKFLOW_STAGES = frozenset(
@@ -39,16 +41,17 @@ WORKFLOW_STAGES = frozenset(
 TERMINAL_STATUSES = frozenset(["success", "failed"])
 
 # Define resumable statuses (can resume execution)
-RESUMABLE_STATUSES = frozenset(["paused", "working", "blocked"])
+RESUMABLE_STATUSES = frozenset(["paused", "stopped", "working", "blocked"])
 
 # Define valid state transitions
 VALID_TRANSITIONS: Mapping[str, frozenset[str]] = {
-    "planning": frozenset(["working", "failed", "paused"]),
+    "planning": frozenset(["working", "failed", "paused", "stopped"]),
     "working": frozenset(
-        ["blocked", "success", "failed", "working", "paused"]
+        ["blocked", "success", "failed", "working", "paused", "stopped"]
     ),  # working -> working for retries
-    "blocked": frozenset(["working", "failed", "paused"]),
-    "paused": frozenset(["working", "failed"]),  # Can resume or fail from paused
+    "blocked": frozenset(["working", "failed", "paused", "stopped"]),
+    "paused": frozenset(["working", "failed", "stopped"]),  # Can resume, fail, or stop from paused
+    "stopped": frozenset(["working", "failed"]),  # Can resume or fail from stopped
     "success": frozenset([]),  # Terminal state
     "failed": frozenset([]),  # Terminal state
 }
