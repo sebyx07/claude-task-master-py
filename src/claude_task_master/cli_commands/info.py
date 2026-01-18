@@ -35,6 +35,15 @@ def status() -> None:
         console.print(f"[cyan]Sessions:[/cyan] {state.session_count}")
         console.print(f"[cyan]Run ID:[/cyan] {state.run_id}")
 
+        # Show tools based on current phase/status
+        if state.status == "planning":
+            console.print("[cyan]Tools:[/cyan] Read, Glob, Grep, Bash (read-only mode)")
+        elif state.status == "working":
+            console.print("[cyan]Tools:[/cyan] All (bypassPermissions mode)")
+        else:
+            # For blocked, paused, success, failed - show what was last used
+            console.print("[cyan]Tools:[/cyan] All (bypassPermissions mode)")
+
         if state.current_pr:
             console.print(f"[cyan]Current PR:[/cyan] #{state.current_pr}")
 
