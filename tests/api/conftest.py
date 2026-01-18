@@ -9,6 +9,7 @@ Provides common fixtures for testing FastAPI endpoints including:
 import json
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -23,6 +24,26 @@ except ImportError:
 
 # Apply skip marker to all tests in this package
 pytestmark = pytest.mark.skipif(not FASTAPI_AVAILABLE, reason="FastAPI not installed")
+
+
+# =============================================================================
+# Mock Credentials Fixture
+# =============================================================================
+
+
+@pytest.fixture(autouse=True)
+def mock_credentials():
+    """Mock credentials for API tests.
+
+    This fixture automatically mocks the CredentialManager to avoid
+    requiring actual credentials during CI tests. The /task/init endpoint
+    checks for valid credentials before initializing a task.
+    """
+    with patch("claude_task_master.api.routes.CredentialManager") as mock_cred_class:
+        mock_instance = MagicMock()
+        mock_instance.get_valid_token.return_value = "mock-test-token"
+        mock_cred_class.return_value = mock_instance
+        yield mock_instance
 
 
 # =============================================================================
