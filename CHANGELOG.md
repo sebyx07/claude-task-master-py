@@ -39,5 +39,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - N/A
 
-[Unreleased]: https://github.com/anthropics/claude-task-master/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/anthropics/claude-task-master/releases/tag/v0.1.0
+[Unreleased]: https://github.com/developerz-ai/claude-task-master/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/developerz-ai/claude-task-master/releases/tag/v0.1.0

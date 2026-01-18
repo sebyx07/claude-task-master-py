@@ -11,8 +11,11 @@ Autonomous task orchestration system that keeps Claude working until a goal is a
 ## Quick Start
 
 ```bash
-# Install
+# Install from PyPI
 pip install claude-task-master
+
+# Or with uv (recommended)
+uv tool install claude-task-master
 
 # Verify setup
 claudetm doctor
@@ -128,6 +131,86 @@ This checks for:
 - ✓ GitHub CLI authentication
 - ✓ Git configuration
 - ✓ Python version compatibility
+
+## Configuration
+
+Claude Task Master uses a config file to override environment variables. This is useful for:
+- Using alternative API providers (OpenRouter, etc.)
+- Customizing model names
+- Setting project-specific settings
+
+### Create Config File
+
+```bash
+# Initialize default config
+claudetm --init-config
+
+# View current config
+claudetm --show-config
+```
+
+This creates `.claude-task-master/config.json`:
+
+```json
+{
+  "version": "1.0",
+  "api": {
+    "anthropic_api_key": null,
+    "anthropic_base_url": "https://api.anthropic.com",
+    "openrouter_api_key": null,
+    "openrouter_base_url": "https://openrouter.ai/api/v1"
+  },
+  "models": {
+    "sonnet": "claude-sonnet-4-5-20250929",
+    "opus": "claude-opus-4-5-20251101",
+    "haiku": "claude-haiku-4-5-20251001"
+  },
+  "git": {
+    "target_branch": "main",
+    "auto_push": true
+  }
+}
+```
+
+### Environment Variables
+
+The config file sets these environment variables before Python starts:
+
+| Config Key | Environment Variable | Description |
+|------------|---------------------|-------------|
+| `api.anthropic_api_key` | `ANTHROPIC_API_KEY` | Anthropic API key |
+| `api.anthropic_base_url` | `ANTHROPIC_BASE_URL` | API base URL |
+| `api.openrouter_api_key` | `OPENROUTER_API_KEY` | OpenRouter API key |
+| `api.openrouter_base_url` | `OPENROUTER_BASE_URL` | OpenRouter base URL |
+| `models.sonnet` | `CLAUDETM_MODEL_SONNET` | Model for sonnet tier |
+| `models.opus` | `CLAUDETM_MODEL_OPUS` | Model for opus tier |
+| `models.haiku` | `CLAUDETM_MODEL_HAIKU` | Model for haiku tier |
+| `git.target_branch` | `CLAUDETM_TARGET_BRANCH` | Target branch for PRs |
+
+### Using OpenRouter
+
+To use OpenRouter instead of direct Anthropic API:
+
+```json
+{
+  "api": {
+    "openrouter_api_key": "sk-or-v1-xxx",
+    "openrouter_base_url": "https://openrouter.ai/api/v1"
+  },
+  "models": {
+    "sonnet": "anthropic/claude-sonnet-4",
+    "opus": "anthropic/claude-opus-4",
+    "haiku": "anthropic/claude-haiku"
+  }
+}
+```
+
+### Debug Config Loading
+
+```bash
+# Enable debug mode to see config loading
+CLAUDETM_DEBUG=1 claudetm status
+```
 
 ## Usage
 
