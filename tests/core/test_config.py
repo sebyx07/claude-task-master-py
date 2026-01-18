@@ -222,7 +222,7 @@ class TestClaudeTaskMasterConfig:
         """Test that invalid field type raises validation error."""
         # Using an invalid type (dict instead of str) to trigger validation error
         with pytest.raises(ValidationError):
-            ClaudeTaskMasterConfig(version={"invalid": "type"})
+            ClaudeTaskMasterConfig(version={"invalid": "type"})  # type: ignore[arg-type]
 
 
 class TestDefaultConfigGeneration:

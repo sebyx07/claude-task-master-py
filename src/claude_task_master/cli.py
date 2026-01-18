@@ -58,6 +58,7 @@ def main(
     """Claude Task Master - Autonomous task orchestration."""
     pass
 
+
 # Register commands from submodules
 register_workflow_commands(app)  # start, resume
 register_info_commands(app)  # status, plan, logs, context, progress
