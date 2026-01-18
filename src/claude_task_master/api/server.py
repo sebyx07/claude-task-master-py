@@ -385,7 +385,15 @@ def run_server(
     effective_host = host or API_HOST
     effective_port = port or API_PORT
     effective_cors = cors_origins if cors_origins is not None else _parse_cors_origins(CORS_ORIGINS)
-    auth_enabled = is_auth_enabled()
+
+    # Check if auth is actually enforceable (configured AND middleware available)
+    auth_configured = is_auth_enabled()
+    auth_enabled = AUTH_MIDDLEWARE_AVAILABLE and auth_configured
+    if auth_configured and not AUTH_MIDDLEWARE_AVAILABLE:
+        logger.warning(
+            "Password authentication is configured but middleware is unavailable. "
+            "Install claude-task-master[api] to enforce auth."
+        )
 
     # Log API configuration
     _log_api_config(effective_host, effective_port, effective_cors, auth_enabled)
