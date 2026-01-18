@@ -10,7 +10,7 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from claude_task_master.api.models import ConfigUpdateRequest
+from claude_task_master.api.models import ConfigUpdateRequest, LogFormat, LogLevel
 
 # =============================================================================
 # PATCH /config Tests
@@ -320,7 +320,7 @@ def test_config_update_request_has_updates():
     assert request.has_updates() is False
 
     # Request with one field
-    request = ConfigUpdateRequest(log_level="verbose")
+    request = ConfigUpdateRequest(log_level=LogLevel.VERBOSE)
     assert request.has_updates() is True
 
 
@@ -329,8 +329,8 @@ def test_config_update_request_to_update_dict():
     request = ConfigUpdateRequest(
         auto_merge=False,
         max_sessions=20,
-        log_level="verbose",
-        log_format="json",
+        log_level=LogLevel.VERBOSE,
+        log_format=LogFormat.JSON,
     )
 
     update_dict = request.to_update_dict()

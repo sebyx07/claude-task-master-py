@@ -425,6 +425,7 @@ class TestControlManagerStop:
         result = control.stop(reason="User cancelled")
 
         assert result.success is True
+        assert result.details is not None
         assert result.details["reason"] == "User cancelled"
 
         progress = initialized_state_manager.load_progress()
@@ -437,6 +438,7 @@ class TestControlManagerStop:
         result = control.stop(cleanup=True)
 
         assert result.success is True
+        assert result.details is not None
         assert result.details["cleanup"] is True
 
         # Verify state was cleaned up
@@ -488,6 +490,7 @@ class TestControlManagerUpdateConfig:
 
         assert result.success is True
         assert result.operation == "update_config"
+        assert result.details is not None
         assert result.details["updated"] == {"auto_merge": False}
 
         state = initialized_state_manager.load_state()
@@ -505,6 +508,7 @@ class TestControlManagerUpdateConfig:
         )
 
         assert result.success is True
+        assert result.details is not None
         assert "auto_merge" in result.details["updated"]
         assert "max_sessions" in result.details["updated"]
         assert "pause_on_pr" in result.details["updated"]
@@ -525,6 +529,7 @@ class TestControlManagerUpdateConfig:
         result = control.update_config(auto_merge=True)
 
         assert result.success is True
+        assert result.details is not None
         assert result.details["updated"] == {}
         assert "No configuration changes" in result.message
 
@@ -534,6 +539,7 @@ class TestControlManagerUpdateConfig:
         result = control.update_config(log_level="verbose")
 
         assert result.success is True
+        assert result.details is not None
         assert result.details["updated"] == {"log_level": "verbose"}
 
         state = initialized_state_manager.load_state()
@@ -587,6 +593,7 @@ class TestControlManagerUpdateConfig:
         control = ControlManager(state_manager=initialized_state_manager)
         result = control.update_config(max_sessions=15)
 
+        assert result.details is not None
         assert "current" in result.details
         assert result.details["current"]["max_sessions"] == 15
 
@@ -618,6 +625,7 @@ class TestControlManagerGetStatus:
         control = ControlManager(state_manager=initialized_state_manager)
         result = control.get_status()
 
+        assert result.details is not None
         assert "status" in result.details
         assert "session_count" in result.details
         assert "current_task_index" in result.details
@@ -636,6 +644,7 @@ class TestControlManagerGetStatus:
         control = ControlManager(state_manager=initialized_state_manager)
         result = control.get_status()
 
+        assert result.details is not None
         assert result.details["tasks"]["completed"] == 2
         assert result.details["tasks"]["total"] == 4
         assert result.details["tasks"]["progress"] == "2/4"
@@ -819,6 +828,7 @@ class TestControlManagerIntegration:
 
         # Check status
         result = control.get_status()
+        assert result.details is not None
         assert result.details["status"] == "paused"
 
         # Check progress has both breaks logged
