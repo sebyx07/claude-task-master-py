@@ -212,3 +212,98 @@ class TestStopTaskTool:
         result = stop_task(state_dir.parent, state_dir=str(state_dir))
         assert result["success"] is False
         assert "stopped" in result["previous_status"]
+
+
+class TestResumeTaskTool:
+    """Test the resume_task MCP tool."""
+
+    def test_resume_task_no_active_task(self, temp_dir):
+        """Test resume_task when no task exists."""
+        from claude_task_master.mcp.tools import resume_task
+
+        result = resume_task(temp_dir)
+        assert result["success"] is False
+        assert "No active task found" in result["message"]
+
+    def test_resume_task_from_paused(self, initialized_state, state_dir):
+        """Test resume_task successfully resumes a paused task."""
+        from claude_task_master.mcp.tools import pause_task, resume_task
+
+        # First pause the task
+        pause_task(state_dir.parent, state_dir=str(state_dir))
+
+        # Then resume it
+        result = resume_task(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is True
+        assert result["previous_status"] == "paused"
+        assert result["new_status"] == "working"
+
+        # Verify state was updated
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        assert state.status == "working"
+
+    def test_resume_task_from_stopped(self, initialized_state, state_dir):
+        """Test resume_task successfully resumes a stopped task."""
+        from claude_task_master.mcp.tools import resume_task, stop_task
+
+        # First stop the task
+        stop_task(state_dir.parent, state_dir=str(state_dir))
+
+        # Then resume it
+        result = resume_task(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is True
+        assert result["previous_status"] == "stopped"
+        assert result["new_status"] == "working"
+
+        # Verify state was updated
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        assert state.status == "working"
+
+    def test_resume_task_from_working(self, initialized_state, state_dir):
+        """Test resume_task succeeds when task is already working (no-op transition)."""
+        from claude_task_master.mcp.tools import resume_task
+
+        # Set task status to working
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        state.status = "working"
+        state_manager.save_state(state)
+
+        # Resume from working -> working (allowed)
+        result = resume_task(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is True
+        assert result["previous_status"] == "working"
+        assert result["new_status"] == "working"
+
+    def test_resume_task_from_success_fails(self, initialized_state, state_dir):
+        """Test resume_task fails if task is in terminal 'success' state."""
+        from claude_task_master.mcp.tools import resume_task
+
+        # Set task status via valid transitions: planning -> working -> success
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        state.status = "working"
+        state_manager.save_state(state)
+        state = state_manager.load_state()
+        state.status = "success"
+        state_manager.save_state(state)
+
+        # Try to resume from terminal state
+        result = resume_task(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is False
+        assert result["previous_status"] == "success"
+
+    def test_resume_task_updates_progress(self, initialized_state, state_dir):
+        """Test resume_task adds entry to progress log."""
+        from claude_task_master.mcp.tools import pause_task, resume_task
+
+        # Pause then resume
+        pause_task(state_dir.parent, state_dir=str(state_dir))
+        resume_task(state_dir.parent, state_dir=str(state_dir))
+
+        # Verify progress was updated
+        state_manager = StateManager(state_dir=state_dir)
+        progress = state_manager.load_progress() or ""
+        assert "Resumed" in progress

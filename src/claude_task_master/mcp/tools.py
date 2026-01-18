@@ -98,6 +98,15 @@ class StopTaskResult(BaseModel):
     cleanup: bool = False
 
 
+class ResumeTaskResult(BaseModel):
+    """Result from resume_task tool."""
+
+    success: bool
+    message: str
+    previous_status: str | None = None
+    new_status: str | None = None
+
+
 # =============================================================================
 # Tool Implementations
 # =============================================================================
@@ -633,6 +642,53 @@ def stop_task(
         return StopTaskResult(
             success=False,
             message=f"Failed to stop task: {e}",
+        ).model_dump()
+
+
+def resume_task(
+    work_dir: Path,
+    state_dir: str | None = None,
+) -> dict[str, Any]:
+    """Resume a paused or blocked task.
+
+    Transitions the task from paused/blocked/stopped status back to working
+    status. This is distinct from CLI resume - it only updates the state
+    without restarting the work loop.
+
+    Args:
+        work_dir: Working directory for the server.
+        state_dir: Optional custom state directory path.
+
+    Returns:
+        Dictionary indicating success or failure with status details.
+    """
+    state_path = Path(state_dir) if state_dir else work_dir / ".claude-task-master"
+    state_manager = StateManager(state_dir=state_path)
+    control_manager = ControlManager(state_manager=state_manager)
+
+    try:
+        result = control_manager.resume()
+        return ResumeTaskResult(
+            success=True,
+            message=result.message,
+            previous_status=result.previous_status,
+            new_status=result.new_status,
+        ).model_dump()
+    except NoActiveTaskError:
+        return ResumeTaskResult(
+            success=False,
+            message="No active task found. Initialize a task first.",
+        ).model_dump()
+    except ControlOperationNotAllowedError as e:
+        return ResumeTaskResult(
+            success=False,
+            message=e.message,
+            previous_status=e.current_status,
+        ).model_dump()
+    except Exception as e:
+        return ResumeTaskResult(
+            success=False,
+            message=f"Failed to resume task: {e}",
         ).model_dump()
 
 
