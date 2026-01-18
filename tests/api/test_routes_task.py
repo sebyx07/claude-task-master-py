@@ -275,7 +275,7 @@ def test_task_init_request_model_validation():
 
     # Missing required field
     with pytest.raises(ValidationError):
-        TaskInitRequest(model="opus")
+        TaskInitRequest(model="opus")  # type: ignore[call-arg]
 
     # Invalid model
     with pytest.raises(ValidationError):

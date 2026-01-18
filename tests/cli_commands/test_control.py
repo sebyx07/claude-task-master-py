@@ -101,6 +101,7 @@ class TestPauseCommand:
 
         # Verify progress was updated
         progress = control_state_manager.load_progress()
+        assert progress is not None
         assert "Paused" in progress
         assert "Testing pause" in progress
 
