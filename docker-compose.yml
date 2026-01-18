@@ -1,0 +1,178 @@
+# =============================================================================
+# Claude Task Master - Docker Compose Configuration
+# =============================================================================
+# This file provides a ready-to-use development and production setup for running
+# Claude Task Master with Docker. It configures the unified server with proper
+# volume mounts for Claude credentials and project files.
+#
+# Quick Start:
+#   docker compose up                        # Start with defaults
+#   docker compose up --build                # Rebuild and start
+#   docker compose down                      # Stop and remove containers
+#
+# With Password Authentication:
+#   CLAUDETM_PASSWORD=secret docker compose up
+#
+# For more configuration options, see the environment variables below.
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Claude Task Master Server
+  # ---------------------------------------------------------------------------
+  # Runs the unified server (REST API + MCP server) with shared authentication.
+  #
+  # Ports:
+  #   - 8000: REST API (FastAPI)
+  #   - 8080: MCP Server (SSE or streamable-http)
+  #
+  # Volumes:
+  #   - ~/.claude: Claude credentials (OAuth tokens for Claude Code subscription)
+  #   - ./project: Project directory for task execution (mount your repo here)
+  #
+  # ---------------------------------------------------------------------------
+  claudetm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/developerz-ai/claude-task-master:latest
+    container_name: claudetm-server
+    restart: unless-stopped
+
+    # Port mappings
+    ports:
+      - "${CLAUDETM_REST_PORT:-8000}:8000"
+      - "${CLAUDETM_MCP_PORT:-8080}:8080"
+
+    # Volume mounts
+    volumes:
+      # Claude credentials - REQUIRED for Claude Code subscription
+      # Mount your ~/.claude directory to provide OAuth tokens
+      - "${CLAUDE_CREDENTIALS_PATH:-~/.claude}:/home/claudetm/.claude:ro"
+
+      # Project directory - mount your repository here
+      # The server will execute tasks in this directory
+      - "${PROJECT_PATH:-.}:/app/project"
+
+      # Git configuration - for commit operations
+      - "${HOME}/.gitconfig:/home/claudetm/.gitconfig:ro"
+
+      # GitHub CLI configuration - for PR operations
+      - "${HOME}/.config/gh:/home/claudetm/.config/gh:ro"
+
+    # Environment variables
+    environment:
+      # Authentication (REQUIRED for production)
+      # Set CLAUDETM_PASSWORD to enable password authentication
+      - CLAUDETM_PASSWORD=${CLAUDETM_PASSWORD:-}
+
+      # Server configuration
+      - CLAUDETM_SERVER_HOST=0.0.0.0
+      - CLAUDETM_REST_PORT=8000
+      - CLAUDETM_MCP_PORT=8080
+      - CLAUDETM_MCP_TRANSPORT=${CLAUDETM_MCP_TRANSPORT:-sse}
+      - CLAUDETM_LOG_LEVEL=${CLAUDETM_LOG_LEVEL:-info}
+
+      # CORS configuration for web clients
+      - CLAUDETM_CORS_ORIGINS=${CLAUDETM_CORS_ORIGINS:-}
+
+      # Webhook configuration (optional)
+      - CLAUDETM_WEBHOOK_URL=${CLAUDETM_WEBHOOK_URL:-}
+      - CLAUDETM_WEBHOOK_SECRET=${CLAUDETM_WEBHOOK_SECRET:-}
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# =============================================================================
+# Networks (optional, for multi-service setups)
+# =============================================================================
+networks:
+  default:
+    name: claudetm-network
+
+# =============================================================================
+# Usage Examples
+# =============================================================================
+#
+# 1. Basic usage with password authentication:
+#
+#    export CLAUDETM_PASSWORD=your-secret-password
+#    docker compose up
+#
+# 2. Mount a specific project directory:
+#
+#    PROJECT_PATH=/path/to/your/repo docker compose up
+#
+# 3. Use custom Claude credentials path:
+#
+#    CLAUDE_CREDENTIALS_PATH=/custom/path/.claude docker compose up
+#
+# 4. Enable debug logging:
+#
+#    CLAUDETM_LOG_LEVEL=debug docker compose up
+#
+# 5. Configure webhooks:
+#
+#    export CLAUDETM_WEBHOOK_URL=https://your-webhook.example.com/endpoint
+#    export CLAUDETM_WEBHOOK_SECRET=your-webhook-secret
+#    docker compose up
+#
+# 6. Development with hot reload (rebuild on changes):
+#
+#    docker compose up --build
+#
+# 7. Run in background:
+#
+#    docker compose up -d
+#    docker compose logs -f  # Follow logs
+#
+# 8. Access the services:
+#
+#    REST API:  http://localhost:8000
+#    API Docs:  http://localhost:8000/docs
+#    MCP SSE:   http://localhost:8080/sse
+#
+# 9. Stop and remove:
+#
+#    docker compose down
+#
+# =============================================================================
+# Volume Mount Notes
+# =============================================================================
+#
+# Claude Credentials (~/.claude):
+#   This directory contains OAuth tokens from your Claude Code subscription.
+#   The server needs these credentials to authenticate with Claude's API.
+#   Structure:
+#     ~/.claude/
+#       credentials.json   # OAuth tokens (accessToken, refreshToken, expiresAt)
+#
+#   Security: Mounted as read-only (:ro) since server only reads credentials.
+#
+# Project Directory:
+#   Mount the repository you want Claude Task Master to work on.
+#   The server will create a .claude-task-master/ directory inside for state.
+#   Example: PROJECT_PATH=/home/user/my-project docker compose up
+#
+# Git Configuration:
+#   Required for git commit operations during task execution.
+#   Mounted read-only for security.
+#
+# GitHub CLI Configuration:
+#   Required for creating PRs and other GitHub operations.
+#   Contains your GitHub authentication token.
+#   Mounted read-only for security.
+#
+# =============================================================================
