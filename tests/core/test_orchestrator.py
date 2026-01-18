@@ -615,16 +615,17 @@ class TestRunWorkflowCycle:
         assert result is None
 
     @patch("claude_task_master.core.workflow_stages.console")
-    def test_workflow_cycle_pr_created_stage(
+    def test_workflow_cycle_pr_created_stage_no_pr_blocks(
         self, mock_console, basic_orchestrator, state_manager, basic_task_state
     ):
-        """Should handle pr_created stage."""
+        """Should block when no PR found - agent failed to create one."""
         state_manager.state_dir.mkdir(exist_ok=True)
         basic_task_state.workflow_stage = "pr_created"
 
         result = basic_orchestrator._run_workflow_cycle(basic_task_state)
-        # Should transition to next stage or return None
-        assert result is None
+        # Should block because no PR was found (agent failed to create one)
+        assert result == 1
+        assert basic_task_state.status == "blocked"
 
     @patch("claude_task_master.core.orchestrator.console")
     def test_workflow_cycle_unknown_stage_resets(

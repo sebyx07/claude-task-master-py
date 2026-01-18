@@ -125,16 +125,32 @@ def build_work_prompt(
 
     builder.add_section("Execution", execution_content)
 
-    # Completion summary
-    builder.add_section(
-        "On Completion - STOP",
-        """**After completing THIS task, STOP.**
+    # Completion summary - different requirements based on whether PR is needed
+    if create_pr:
+        completion_content = """**After completing THIS task, STOP.**
 
-**IMPORTANT: Always commit your work before reporting completion.**
-```bash
-# 1. Commit your changes (.claude-task-master/ is auto-gitignored)
-git add -A && git commit -m "task: Brief description of what was done"
+**IMPORTANT: You MUST push and create a PR before reporting completion.**
+
+Report (ALL required):
+1. What was completed
+2. Tests run and results
+3. Files modified
+4. Commit hash (REQUIRED)
+5. **PR URL (REQUIRED)** - Work is NOT complete without a PR!
+6. Any blockers
+
+⚠️ **DO NOT say "TASK COMPLETE" until you have created a PR and have the URL.**
+
+End your response with:
 ```
+TASK COMPLETE
+```
+
+**The orchestrator will start a NEW session for the next task.**"""
+    else:
+        completion_content = """**After completing THIS task, STOP.**
+
+**IMPORTANT: Commit your work but DO NOT create a PR yet.**
 
 Report:
 1. What was completed
@@ -143,13 +159,16 @@ Report:
 4. Commit hash (REQUIRED - must have committed)
 5. Any blockers
 
+⚠️ **DO NOT push or create PR - more tasks remain in this PR group.**
+
 End your response with:
 ```
 TASK COMPLETE
 ```
 
-**The orchestrator will start a NEW session for the next task.**""",
-    )
+**The orchestrator will start a NEW session for the next task.**"""
+
+    builder.add_section("On Completion - STOP", completion_content)
 
     return builder.build()
 
@@ -199,7 +218,7 @@ EOF
 **Note:** The `.claude-task-master/` directory is automatically gitignored - it contains
 orchestrator state files that should never be committed.
 
-**6. Push and Create PR** (REQUIRED)
+**6. Push and Create PR** (REQUIRED - DO NOT SKIP!)
 ```bash
 git push -u origin HEAD
 gh pr create --title "type: description" --body "..." --label "claudetm"
@@ -208,7 +227,8 @@ If label doesn't exist, create it and retry.
 
 **PR title format:** `type: Brief description`
 
-⚠️ **Your work is NOT done until pushed and in a PR!**
+⚠️ **CRITICAL: Your work is NOT complete until you have a PR URL!**
+⚠️ **You MUST include the PR URL in your completion report.**
 
 **STOP AFTER PR CREATION - DO NOT:**
 - ❌ Wait for CI (`sleep`, `watch`, polling)

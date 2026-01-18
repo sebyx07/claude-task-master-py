@@ -237,31 +237,31 @@ class TestHandlePRCreatedStage:
         mock_console.success.assert_called()
 
     @patch("claude_task_master.core.workflow_stages.console")
-    def test_no_pr_found_skips_to_merged(
+    def test_no_pr_found_blocks(
         self, mock_console, workflow_handler, state_manager, basic_task_state, mock_github_client
     ):
-        """Should skip to merged stage when no PR found."""
+        """Should block when no PR found - agent failed to create one."""
         state_manager.state_dir.mkdir(exist_ok=True)
         mock_github_client.get_pr_for_current_branch.return_value = None
 
         result = workflow_handler.handle_pr_created_stage(basic_task_state)
 
-        assert result is None
-        assert basic_task_state.workflow_stage == "merged"
-        mock_console.detail.assert_called()
+        assert result == 1  # Blocked
+        assert basic_task_state.status == "blocked"
+        mock_console.error.assert_called()
 
     @patch("claude_task_master.core.workflow_stages.console")
-    def test_pr_detection_error_skips_to_merged(
+    def test_pr_detection_error_blocks(
         self, mock_console, workflow_handler, state_manager, basic_task_state, mock_github_client
     ):
-        """Should skip to merged stage when PR detection fails."""
+        """Should block when PR detection fails with exception."""
         state_manager.state_dir.mkdir(exist_ok=True)
         mock_github_client.get_pr_for_current_branch.side_effect = Exception("API error")
 
         result = workflow_handler.handle_pr_created_stage(basic_task_state)
 
-        assert result is None
-        assert basic_task_state.workflow_stage == "merged"
+        assert result == 1  # Blocked
+        assert basic_task_state.status == "blocked"
         mock_console.warning.assert_called()
 
     @patch("claude_task_master.core.workflow_stages.console")

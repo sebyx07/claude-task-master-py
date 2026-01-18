@@ -562,7 +562,7 @@ class TestFullWorkflowExecution:
     def test_work_not_done_until_pr_warning(self) -> None:
         """Test warning about work not done until PR."""
         result = build_work_prompt("Task", create_pr=True)
-        assert "NOT done until pushed" in result or "NOT done until" in result
+        assert "NOT complete until you have a PR URL" in result or "PR URL (REQUIRED)" in result
 
     def test_stop_after_pr_creation_instruction(self) -> None:
         """Test instruction to stop after PR creation."""

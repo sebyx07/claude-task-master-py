@@ -147,7 +147,14 @@ class WorkflowStageHandler:
         self.pr_context = pr_context
 
     def handle_pr_created_stage(self, state: TaskState) -> int | None:
-        """Handle PR creation - detect PR from current branch."""
+        """Handle PR creation - detect PR from current branch.
+
+        The agent worker should have already created the PR. This stage detects
+        the PR and moves to CI waiting.
+
+        If no PR is found, it means the agent failed to create one despite being
+        instructed to. In this case, we block and require manual intervention.
+        """
         console.info("Checking PR status...")
 
         # Try to detect PR number from current branch if not already set
@@ -159,15 +166,21 @@ class WorkflowStageHandler:
                     state.current_pr = pr_number
                     self.state_manager.save_state(state)
                 else:
-                    console.detail("No PR found for current branch - skipping CI wait")
-                    state.workflow_stage = "merged"  # Skip to next task
+                    # No PR found - agent failed to create one
+                    console.error("No PR found for current branch!")
+                    console.error("The agent was instructed to create a PR but didn't.")
+                    console.detail("Manual intervention required:")
+                    console.detail("  1. Push the branch: git push -u origin HEAD")
+                    console.detail("  2. Create a PR: gh pr create --title 'feat: description'")
+                    console.detail("  3. Resume: claudetm resume")
+                    state.status = "blocked"
                     self.state_manager.save_state(state)
-                    return None
+                    return 1
             except Exception as e:
                 console.warning(f"Could not detect PR: {e}")
-                state.workflow_stage = "merged"  # Skip to next task
+                state.status = "blocked"
                 self.state_manager.save_state(state)
-                return None
+                return 1
 
         console.detail(f"PR #{state.current_pr} - moving to CI check")
         state.workflow_stage = "waiting_ci"
