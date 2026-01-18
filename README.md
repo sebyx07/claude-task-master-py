@@ -290,6 +290,17 @@ To use OpenRouter instead of direct Anthropic API:
 CLAUDETM_DEBUG=1 claudetm status
 ```
 
+## Documentation
+
+Complete documentation for all features and deployment options:
+
+| Guide | Description |
+|-------|-------------|
+| **[Docker Deployment](./docs/docker.md)** | Docker installation, configuration, volume mounts, and production deployment |
+| **[Authentication](./docs/authentication.md)** | Password-based authentication for REST API, MCP server, and webhooks |
+| **[REST API Reference](./docs/api-reference.md)** | Complete REST API endpoint documentation with examples |
+| **[Webhooks](./docs/webhooks.md)** | Webhook events, payload formats, HMAC signature verification, and integration examples |
+
 ## Usage
 
 ### CLI Commands
