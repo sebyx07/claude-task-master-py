@@ -141,12 +141,14 @@ def start(
     webhook_url: str | None = typer.Option(
         None,
         "--webhook-url",
-        help="URL to receive webhook notifications for task lifecycle events",
+        envvar="CLAUDETM_WEBHOOK_URL",
+        help="URL to receive webhook notifications for task lifecycle events (env: CLAUDETM_WEBHOOK_URL)",
     ),
     webhook_secret: str | None = typer.Option(
         None,
         "--webhook-secret",
-        help="HMAC secret for signing webhook payloads (recommended for security)",
+        envvar="CLAUDETM_WEBHOOK_SECRET",
+        help="HMAC secret for signing webhook payloads (env: CLAUDETM_WEBHOOK_SECRET)",
     ),
 ) -> None:
     """Start a new task with the given goal.
@@ -157,6 +159,10 @@ def start(
         claudetm start "Refactor auth" -n 5 --pause-on-pr
         claudetm start "Debug issue" -l verbose --log-format json
         claudetm start "Deploy feature" --webhook-url https://example.com/hooks
+
+    Environment Variables:
+        CLAUDETM_WEBHOOK_URL: Set webhook URL (overridden by --webhook-url argument)
+        CLAUDETM_WEBHOOK_SECRET: Set webhook secret (overridden by --webhook-secret argument)
     """
     log_level_enum, log_format_enum = _validate_log_options(log_level, log_format)
 
