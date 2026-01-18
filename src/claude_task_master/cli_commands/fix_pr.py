@@ -105,8 +105,8 @@ def _is_check_pending(check: dict[str, Any]) -> bool:
 def _wait_for_ci_complete(github_client: GitHubClient, pr_number: int) -> PRStatus:
     """Wait for all CI checks to complete.
 
-    Waits for all checks to complete, then does one extra refresh to catch
-    late-starting checks (like CodeRabbit) that may not appear immediately.
+    Uses merge_state_status to detect when required checks (like CodeRabbit)
+    haven't reported yet, even if all visible checks are complete.
 
     Args:
         github_client: GitHub client for API calls.
@@ -117,12 +117,8 @@ def _wait_for_ci_complete(github_client: GitHubClient, pr_number: int) -> PRStat
     """
     console.print(f"[bold]Waiting for CI checks on PR #{pr_number}...[/bold]")
 
-    last_check_count = 0
-    stable_cycles = 0  # Track how many cycles the check count has been stable
-
     while True:
         status = github_client.get_pr_status(pr_number)
-        current_check_count = len(status.check_details)
 
         # Count pending checks (both CheckRun and StatusContext)
         pending = [
@@ -131,30 +127,31 @@ def _wait_for_ci_complete(github_client: GitHubClient, pr_number: int) -> PRStat
             if _is_check_pending(check)
         ]
 
+        # Check if merge is blocked (required checks missing/failing)
+        # BLOCKED means required checks haven't passed yet
+        merge_blocked = status.merge_state_status == "BLOCKED"
+
         if not pending:
-            # All current checks complete - but wait for check count to stabilize
-            # to catch late-starting checks like CodeRabbit
-            if current_check_count == last_check_count and current_check_count > 0:
-                stable_cycles += 1
-                if stable_cycles >= 2:
-                    # Check count stable for 2 cycles, safe to return
-                    return status
+            # All visible checks complete
+            if merge_blocked and status.ci_state == "SUCCESS":
+                # CI shows success but merge is blocked - required checks missing
                 console.print(
-                    f"  ✓ All {current_check_count} checks complete, verifying no new checks..."
+                    f"  ✓ {len(status.check_details)} visible checks complete, "
+                    "waiting for required checks..."
                 )
+            elif not merge_blocked or status.ci_state in ("FAILURE", "ERROR"):
+                # Either not blocked, or blocked due to failures (not missing checks)
+                return status
             else:
-                stable_cycles = 0
-                if current_check_count > 0:
-                    console.print(f"  ✓ {current_check_count} checks complete, waiting for more...")
+                # Merge blocked with pending state - keep waiting
+                console.print(f"  ⏳ Waiting for required checks ({status.merge_state_status})...")
         else:
-            stable_cycles = 0
-            # Show progress
+            # Show progress for pending checks
             console.print(
                 f"  ⏳ Waiting for {len(pending)} check(s): "
                 f"{', '.join(pending[:3])}{'...' if len(pending) > 3 else ''}"
             )
 
-        last_check_count = current_check_count
         time.sleep(CI_POLL_INTERVAL)
 
 
