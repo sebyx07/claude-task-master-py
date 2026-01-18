@@ -79,9 +79,9 @@ reviews:
     ruff:
       enabled: true
     pylint:
-      enabled: true
+      enabled: false
     flake8:
-      enabled: true
+      enabled: false
 
     # Security
     semgrep:
