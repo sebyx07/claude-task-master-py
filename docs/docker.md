@@ -154,7 +154,15 @@ Claude Task Master requires several volume mounts to function properly. Understa
 
 **Read-only:** ✅ Yes (credentials are only read, never modified)
 
-The Claude credentials directory contains your Claude Code subscription authentication tokens. This is required for the server to authenticate with Claude's API on your behalf.
+**⚠️ Required for Claude Code Subscription**
+
+The Claude credentials directory contains your Claude Code subscription authentication tokens. This is **required** for the server to authenticate with Claude's API on your behalf. Without these credentials, the server cannot access Claude's agent capabilities.
+
+**Why This is Needed:**
+- Claude Task Master uses the Claude Agent SDK to execute tasks
+- The SDK requires valid OAuth tokens from your Claude Code subscription
+- These tokens are stored in `~/.claude/.credentials.json` by the Claude CLI
+- The Docker container needs read access to these credentials to function
 
 **Structure:**
 ```
@@ -165,25 +173,45 @@ The Claude credentials directory contains your Claude Code subscription authenti
 
 **Getting Credentials:**
 
-1. Install and run the Claude CLI:
+Before running the Docker container, you must have a Claude Code subscription and authenticate with the Claude CLI to generate OAuth credentials.
+
+1. **Subscribe to Claude Code** (if you haven't already):
+   - Visit [claude.ai](https://claude.ai) and subscribe to Claude Code
+   - This subscription provides access to the Claude Agent SDK used by Task Master
+
+2. **Install and authenticate with Claude CLI**:
    ```bash
    # Install Claude CLI
    pip install claude-cli
 
-   # Login to Claude
+   # Run Claude and login
    claude
    /login
+
+   # Follow the authentication flow in your browser
+   # This will create ~/.claude/.credentials.json with OAuth tokens
    ```
 
-2. Verify credentials were created:
+3. **Verify credentials were created**:
    ```bash
    ls -la ~/.claude/.credentials.json
+   # Should show a file with your OAuth tokens
+
+   # Check the credentials are valid
+   cat ~/.claude/.credentials.json | jq '.claudeAiOauth.accessToken' | head -c 20
+   # Should show the beginning of your access token
    ```
 
-3. Mount the credentials directory to Docker:
+4. **Mount the credentials directory to Docker**:
    ```bash
    -v ~/.claude:/home/claudetm/.claude:ro
    ```
+
+**Troubleshooting:**
+- If `~/.claude/.credentials.json` doesn't exist, the authentication wasn't successful
+- Try re-running the `/login` command in the Claude CLI
+- Ensure you have an active Claude Code subscription
+- The Docker container will fail to start if credentials are missing or invalid
 
 **Security Note:** The credentials file contains sensitive OAuth tokens. Always mount as read-only (`:ro`) and never commit to version control.
 
