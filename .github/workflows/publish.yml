@@ -158,7 +158,7 @@ jobs:
     name: Publish to PyPI
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [verify, build, create-release]
-    environment: release
+    environment: pypi
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@v6
