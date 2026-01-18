@@ -278,7 +278,7 @@ def fix_pr(
 
         # Initialize credentials and agent
         cred_manager = CredentialManager()
-        access_token = cred_manager.get_access_token()
+        access_token = cred_manager.get_valid_token()
 
         # Initialize state manager (use a temp directory for fix-pr)
         working_dir = Path.cwd()
