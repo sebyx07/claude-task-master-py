@@ -1,5 +1,6 @@
 """Tests for fix-pr CLI command."""
 
+import re
 from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
@@ -8,6 +9,12 @@ from claude_task_master.cli import app
 from claude_task_master.cli_commands.fix_pr import _parse_pr_input
 
 runner = CliRunner()
+
+
+def strip_ansi(text: str) -> str:
+    """Remove ANSI escape codes from text."""
+    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
+    return ansi_pattern.sub("", text)
 
 
 class TestParsePRInput:
@@ -46,10 +53,11 @@ class TestFixPRCommand:
     def test_help(self) -> None:
         """Should display help."""
         result = runner.invoke(app, ["fix-pr", "--help"])
+        output = strip_ansi(result.stdout)
         assert result.exit_code == 0
-        assert "Fix a PR by iteratively" in result.stdout
-        assert "--max-iterations" in result.stdout
-        assert "--no-merge" in result.stdout
+        assert "Fix a PR by iteratively" in output
+        assert "--max-iterations" in output
+        assert "--no-merge" in output
 
     @patch("claude_task_master.github.GitHubClient")
     def test_no_pr_for_branch_fails(self, mock_github_class: MagicMock) -> None:
