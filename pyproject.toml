@@ -55,8 +55,11 @@ all = [
 ]
 
 [project.scripts]
-# Python CLI entry point (use claudetm bash wrapper for full functionality)
+# Main entry point: calls Python wrapper which loads config.json and executes bash wrapper
+claudetm = "claude_task_master.wrapper:main"
+# Alternative: direct Python CLI (bypasses bash wrapper and config loading)
 claudetm-py = "claude_task_master.cli:app"
+# MCP server entry point
 claudetm-mcp = "claude_task_master.mcp.server:main"
 
 # Setuptools configuration
