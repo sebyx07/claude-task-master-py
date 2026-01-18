@@ -124,6 +124,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     Handles startup and shutdown events, including:
     - Recording server start time for uptime tracking
     - Logging startup/shutdown messages
+    - Logging authentication status
     - Future: graceful shutdown of running tasks
 
     Args:
@@ -136,6 +137,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.start_time = time.time()
     app.state.active_tasks = 0
     logger.info(f"Claude Task Master API v{__version__} starting up")
+
+    # Log authentication status on startup
+    auth_enabled = getattr(app.state, "auth_enabled", False)
+    if auth_enabled:
+        logger.info("🔐 Password authentication is enabled")
+    else:
+        logger.info("🔓 Password authentication is disabled")
 
     yield
 
