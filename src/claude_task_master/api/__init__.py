@@ -21,9 +21,67 @@ Usage:
     run_server(host="0.0.0.0", port=8000)
 """
 
-# API components will be imported here as they are implemented in subsequent tasks:
-# - models.py: Pydantic request/response models
+# API components - imported as they are implemented
+from claude_task_master.api.models import (
+    # Response models
+    APIInfo,
+    # Request models
+    ConfigUpdateRequest,
+    ContextResponse,
+    ControlResponse,
+    ErrorResponse,
+    HealthResponse,
+    # Enums
+    LogFormat,
+    LogLevel,
+    LogsResponse,
+    PauseRequest,
+    PlanResponse,
+    ProgressResponse,
+    ResumeRequest,
+    StopRequest,
+    TaskDeleteResponse,
+    TaskInitRequest,
+    TaskInitResponse,
+    TaskListItem,
+    TaskListResponse,
+    TaskOptionsResponse,
+    TaskProgressInfo,
+    TaskStatus,
+    TaskStatusResponse,
+    WorkflowStage,
+)
+
+# Future imports as implemented:
 # - server.py: FastAPI app factory and server runner
 # - routes.py: API endpoint definitions
 
-__all__: list[str] = []
+__all__: list[str] = [
+    # Enums
+    "TaskStatus",
+    "WorkflowStage",
+    "LogLevel",
+    "LogFormat",
+    # Request models
+    "PauseRequest",
+    "StopRequest",
+    "ResumeRequest",
+    "ConfigUpdateRequest",
+    "TaskInitRequest",
+    # Response models
+    "TaskStatusResponse",
+    "TaskOptionsResponse",
+    "TaskProgressInfo",
+    "ControlResponse",
+    "PlanResponse",
+    "LogsResponse",
+    "ProgressResponse",
+    "ContextResponse",
+    "TaskListItem",
+    "TaskListResponse",
+    "HealthResponse",
+    "TaskInitResponse",
+    "TaskDeleteResponse",
+    "ErrorResponse",
+    "APIInfo",
+]
