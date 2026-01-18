@@ -512,6 +512,15 @@ def run_server(
     # Log configuration
     _log_server_config(transport, effective_host, effective_port, auth_enabled)
 
+    # Enforce auth for non-localhost network binds (as promised in docstring)
+    if transport != "stdio" and effective_host not in ("127.0.0.1", "localhost", "::1"):
+        if not auth_enabled:
+            logger.error(
+                f"MCP server cannot bind to non-localhost address ({effective_host}) "
+                "without authentication. Set CLAUDETM_PASSWORD or CLAUDETM_PASSWORD_HASH."
+            )
+            raise SystemExit(1)
+
     # Create the MCP server
     mcp = create_server(name=name, working_dir=working_dir)
 

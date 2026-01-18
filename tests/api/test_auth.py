@@ -14,21 +14,31 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
-from claude_task_master.api.routes import register_routes
-from claude_task_master.api.server import lifespan
-
-# Skip all tests if FastAPI is not installed
+# Skip all tests if FastAPI or auth middleware is not installed
 try:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from claude_task_master.api.routes import register_routes
+    from claude_task_master.api.server import lifespan
     from claude_task_master.auth.middleware import PasswordAuthMiddleware
 
+    FASTAPI_AVAILABLE = True
     MIDDLEWARE_AVAILABLE = True
 except ImportError:
+    FASTAPI_AVAILABLE = False
     MIDDLEWARE_AVAILABLE = False
+    FastAPI = object  # type: ignore[assignment,misc]
+    TestClient = object  # type: ignore[assignment,misc]
+    register_routes = None  # type: ignore[assignment]
+    lifespan = None  # type: ignore[assignment]
+    PasswordAuthMiddleware = None  # type: ignore[assignment,misc]
 
-pytestmark = pytest.mark.skipif(not MIDDLEWARE_AVAILABLE, reason="Auth middleware not available")
+pytestmark = pytest.mark.skipif(
+    not (FASTAPI_AVAILABLE and MIDDLEWARE_AVAILABLE),
+    reason="FastAPI or auth middleware not available",
+)
 
 
 # =============================================================================
