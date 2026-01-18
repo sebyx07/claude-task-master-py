@@ -15,8 +15,8 @@ Thank you for your interest in contributing to Claude Task Master! This document
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-org/claude-task-master-py.git
-   cd claude-task-master-py
+   git clone https://github.com/your-org/claude-task-master.git
+   cd claude-task-master
    ```
 
 2. Install dependencies:
@@ -128,7 +128,7 @@ Types:
 ## Project Structure
 
 ```
-claude-task-master-py/
+claude-task-master/
 ├── src/claude_task_master/
 │   ├── cli.py              # CLI commands
 │   ├── core/               # Core functionality
@@ -202,7 +202,7 @@ Include:
 
 ## Questions?
 
-- Open a [GitHub Discussion](https://github.com/your-org/claude-task-master-py/discussions)
+- Open a [GitHub Discussion](https://github.com/your-org/claude-task-master/discussions)
 - Check existing issues and PRs
 
 Thank you for contributing!

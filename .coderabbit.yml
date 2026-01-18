@@ -1,0 +1,202 @@
+# CodeRabbit Configuration
+# Docs: https://docs.coderabbit.ai/reference/configuration
+
+language: en-US
+tone_instructions: >
+  Be friendly and constructive. Focus on significant issues rather than nitpicking.
+  Suggest improvements without being prescriptive. Acknowledge good patterns when you see them.
+early_access: false
+enable_free_tier: true
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_placeholder: '@coderabbitai summary'
+  review_status: true
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  poem: false
+
+  # Useful features
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  suggested_reviewers: true
+
+  # Don't auto-apply, just suggest
+  auto_apply_labels: false
+  auto_assign_reviewers: false
+
+  path_filters: []
+
+  path_instructions:
+    - path: "src/**/*.py"
+      instructions: >
+        This is an autonomous task orchestration system using Claude Agent SDK.
+        Focus on: error handling, state management consistency, and async patterns.
+    - path: "tests/**/*.py"
+      instructions: >
+        Review test coverage and edge cases. Ensure tests are isolated and deterministic.
+    - path: "*.md"
+      instructions: >
+        Check for clarity and accuracy. Don't nitpick formatting.
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    ignore_title_keywords:
+      - WIP
+      - DO NOT MERGE
+      - DRAFT
+    drafts: false
+    base_branches: []
+
+  # Relaxed pre-merge checks - warnings only
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+
+  pre_merge_checks:
+    docstrings:
+      mode: warning
+      threshold: 60
+    title:
+      mode: warning
+    description:
+      mode: warning
+    issue_assessment:
+      mode: warning
+    custom_checks: []
+
+  # Tools - only enable relevant ones for Python project
+  tools:
+    # Python tools
+    ruff:
+      enabled: true
+    pylint:
+      enabled: true
+    flake8:
+      enabled: true
+
+    # Security
+    semgrep:
+      enabled: true
+    gitleaks:
+      enabled: true
+
+    # YAML/Markdown/Shell
+    yamllint:
+      enabled: true
+    markdownlint:
+      enabled: true
+    shellcheck:
+      enabled: true
+    actionlint:
+      enabled: true
+
+    # GitHub integration
+    github-checks:
+      enabled: true
+      timeout_ms: 90000
+
+    # Disable irrelevant tools
+    ast-grep:
+      essential_rules: false
+    biome:
+      enabled: false
+    hadolint:
+      enabled: false
+    swiftlint:
+      enabled: false
+    phpstan:
+      enabled: false
+    phpmd:
+      enabled: false
+    phpcs:
+      enabled: false
+    golangci-lint:
+      enabled: false
+    checkov:
+      enabled: false
+    detekt:
+      enabled: false
+    eslint:
+      enabled: false
+    fortitudeLint:
+      enabled: false
+    rubocop:
+      enabled: false
+    buf:
+      enabled: false
+    regal:
+      enabled: false
+    pmd:
+      enabled: false
+    clang:
+      enabled: false
+    cppcheck:
+      enabled: false
+    circleci:
+      enabled: false
+    clippy:
+      enabled: false
+    sqlfluff:
+      enabled: false
+    prismaLint:
+      enabled: false
+    oxc:
+      enabled: false
+    shopifyThemeCheck:
+      enabled: false
+    luacheck:
+      enabled: false
+    brakeman:
+      enabled: false
+    dotenvLint:
+      enabled: false
+    htmlhint:
+      enabled: false
+    checkmake:
+      enabled: false
+    osvScanner:
+      enabled: false
+    languagetool:
+      enabled: false
+
+chat:
+  auto_reply: true
+
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "CLAUDE.md"
+      - "CONTRIBUTING.md"
+  learnings:
+    scope: auto
+  issues:
+    scope: auto
+  pull_requests:
+    scope: auto
+
+code_generation:
+  docstrings:
+    language: en-US
+  unit_tests:
+    path_instructions: []
+
+issue_enrichment:
+  auto_enrich:
+    enabled: false
+  planning:
+    enabled: true
+    auto_planning:
+      enabled: false

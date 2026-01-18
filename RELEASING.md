@@ -99,7 +99,7 @@ Check the GitHub Actions workflow:
 # View workflow status
 gh run watch
 
-# Or visit: https://github.com/sebyx07/claude-task-master-py/actions
+# Or visit: https://github.com/developerz-ai/claude-task-master/actions
 ```
 
 The workflow must complete successfully for the package to be published.
@@ -227,7 +227,7 @@ This project uses PyPI's trusted publishing (no manual tokens needed).
    - Go to project settings
    - Add trusted publisher:
      - Owner: `sebyx07`
-     - Repository: `claude-task-master-py`
+     - Repository: `claude-task-master`
      - Workflow: `release.yml`
      - Environment: `release`
 
