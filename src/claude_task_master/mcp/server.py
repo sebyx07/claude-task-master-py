@@ -39,6 +39,10 @@ StartTaskResult = tools.StartTaskResult
 CleanResult = tools.CleanResult
 LogsResult = tools.LogsResult
 HealthCheckResult = tools.HealthCheckResult
+PauseTaskResult = tools.PauseTaskResult
+StopTaskResult = tools.StopTaskResult
+ResumeTaskResult = tools.ResumeTaskResult
+UpdateConfigResult = tools.UpdateConfigResult
 
 
 # =============================================================================
@@ -225,6 +229,104 @@ def create_server(
             Dictionary containing health status information.
         """
         return tools.health_check(work_dir, name, start_time)
+
+    @mcp.tool()
+    def pause_task(
+        reason: str | None = None,
+        state_dir: str | None = None,
+    ) -> dict[str, Any]:
+        """Pause a running task.
+
+        Transitions the task from planning/working status to paused status.
+        The task can be resumed later using resume_task.
+
+        Args:
+            reason: Optional reason for pausing (stored in progress).
+            state_dir: Optional custom state directory path.
+
+        Returns:
+            Dictionary indicating success or failure with status details.
+        """
+        return tools.pause_task(work_dir, reason, state_dir)
+
+    @mcp.tool()
+    def stop_task(
+        reason: str | None = None,
+        cleanup: bool = False,
+        state_dir: str | None = None,
+    ) -> dict[str, Any]:
+        """Stop a running task and trigger graceful shutdown.
+
+        Transitions the task from any active status to stopped status and
+        triggers shutdown of any running processes. The task can be resumed
+        later if not cleaned up.
+
+        Args:
+            reason: Optional reason for stopping (stored in progress).
+            cleanup: If True, also cleanup state files after stopping.
+            state_dir: Optional custom state directory path.
+
+        Returns:
+            Dictionary indicating success or failure with status details.
+        """
+        return tools.stop_task(work_dir, reason, cleanup, state_dir)
+
+    @mcp.tool()
+    def resume_task(state_dir: str | None = None) -> dict[str, Any]:
+        """Resume a paused or blocked task.
+
+        Transitions the task from paused/blocked/stopped status back to working
+        status. This is distinct from CLI resume - it only updates the state
+        without restarting the work loop.
+
+        Args:
+            state_dir: Optional custom state directory path.
+
+        Returns:
+            Dictionary indicating success or failure with status details.
+        """
+        return tools.resume_task(work_dir, state_dir)
+
+    @mcp.tool()
+    def update_config(
+        auto_merge: bool | None = None,
+        max_sessions: int | None = None,
+        pause_on_pr: bool | None = None,
+        enable_checkpointing: bool | None = None,
+        log_level: str | None = None,
+        log_format: str | None = None,
+        pr_per_task: bool | None = None,
+        state_dir: str | None = None,
+    ) -> dict[str, Any]:
+        """Update task configuration options at runtime.
+
+        Updates the TaskOptions stored in the task state. Only specified
+        options are updated; others retain their current values.
+
+        Args:
+            auto_merge: Whether to auto-merge PRs when approved.
+            max_sessions: Maximum number of work sessions before pausing.
+            pause_on_pr: Whether to pause after creating PR for manual review.
+            enable_checkpointing: Whether to enable state checkpointing.
+            log_level: Log level (quiet, normal, verbose).
+            log_format: Log format (text, json).
+            pr_per_task: Whether to create PR per task vs per group.
+            state_dir: Optional custom state directory path.
+
+        Returns:
+            Dictionary indicating success or failure with updated config.
+        """
+        return tools.update_config(
+            work_dir,
+            auto_merge=auto_merge,
+            max_sessions=max_sessions,
+            pause_on_pr=pause_on_pr,
+            enable_checkpointing=enable_checkpointing,
+            log_level=log_level,
+            log_format=log_format,
+            pr_per_task=pr_per_task,
+            state_dir=state_dir,
+        )
 
     # =============================================================================
     # Resource Wrappers
