@@ -509,6 +509,49 @@ claudetm context
 
 The system follows SOLID principles with strict Single Responsibility:
 
+### Server Architecture
+
+When running with the unified server (`claudetm-server`), the following components work together:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Claude Task Master Server                       │
+│                                                                       │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐             │
+│  │  REST API    │   │  MCP Server  │   │   Webhooks   │             │
+│  │  (FastAPI)   │   │  (FastMCP)   │   │   (httpx)    │             │
+│  └──────┬───────┘   └──────┬───────┘   └──────┬───────┘             │
+│         │                  │                  │                      │
+│         └──────────────────┼──────────────────┘                      │
+│                            │                                         │
+│                    ┌───────▼───────┐                                 │
+│                    │ Auth Module   │                                 │
+│                    │ (Password)    │                                 │
+│                    └───────────────┘                                 │
+└─────────────────────────────────────────────────────────────────────┘
+
+Docker Container:
+┌─────────────────────────────────────────────────────────────────────┐
+│  claudetm-server                                                     │
+│                                                                       │
+│  Volumes:                                                            │
+│  - /app/project → project directory                                 │
+│  - /root/.claude → Claude credentials (~/.claude)                   │
+│                                                                       │
+│  Env: CLAUDETM_PASSWORD, CLAUDETM_WEBHOOK_URL, ...                   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Server Features:**
+- **REST API** - Create and manage tasks, view status, manage webhooks
+- **MCP Server** - Claude editor integration for native IDE support
+- **Webhooks** - Send notifications on task events with HMAC verification
+- **Unified Authentication** - Single password protects all three interfaces
+- **Docker Ready** - Multi-arch image published to GitHub Container Registry
+
+For detailed Docker deployment, see [Docker Deployment Guide](./docs/docker.md).
+For authentication details, see [Authentication Guide](./docs/authentication.md).
+
 ### Core Components
 
 | Component | Responsibility |

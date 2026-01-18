@@ -632,7 +632,7 @@ Slack's Incoming Webhooks allow you to post messages directly to Slack channels.
 1. Go to your Slack workspace settings
 2. Navigate to "Apps" → "Incoming Webhooks"
 3. Click "Add to Slack" and select a channel
-4. Copy the webhook URL (e.g., `https://hooks.slack.com/services/YOUR_TEAM_ID/YOUR_CHANNEL_ID/YOUR_TOKEN`)
+4. Copy the webhook URL (example format: `https://hooks.slack.com/services/YOUR_TEAM_ID/YOUR_CHANNEL_ID/YOUR_TOKEN`)
 
 **Step 2: Set up transformation service**
 
@@ -687,7 +687,7 @@ Discord webhooks natively accept JSON payloads, but like Slack, require a specif
 2. Go to "Integrations" → "Webhooks"
 3. Click "New Webhook"
 4. Set the name and channel
-5. Copy the webhook URL (e.g., `https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN`)
+5. Copy the webhook URL (e.g., `https://discord.com/api/webhooks/123456789/abcdefghijklmnop`)
 
 **Step 2: Configure transformation service**
 
@@ -708,7 +708,7 @@ curl -X POST http://localhost:8000/webhooks \
     "max_retries": 3,
     "verify_ssl": true,
     "headers": {
-      "X-Discord-Webhook-URL": "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+      "X-Discord-Webhook-URL": "https://discord.com/api/webhooks/123456789/abcdefghijklmnop"
     }
   }'
 ```
