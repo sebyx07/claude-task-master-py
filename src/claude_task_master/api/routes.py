@@ -10,23 +10,33 @@ Endpoints:
 - GET /progress: Get progress summary
 - GET /context: Get accumulated context/learnings
 - GET /health: Health check endpoint
+- POST /task/init: Initialize a new task
+- DELETE /task: Delete/cleanup current task
 - POST /control/stop: Stop a running task with optional cleanup
 - POST /control/resume: Resume a paused or blocked task
 - PATCH /config: Update runtime configuration options
 
 Usage:
-    from claude_task_master.api.routes import create_info_router, create_control_router
+    from claude_task_master.api.routes import (
+        create_info_router,
+        create_control_router,
+        create_task_router,
+    )
 
     router = create_info_router()
     app.include_router(router)
 
     control_router = create_control_router()
     app.include_router(control_router)
+
+    task_router = create_task_router()
+    app.include_router(task_router)
 """
 
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -43,14 +53,19 @@ from claude_task_master.api.models import (
     ProgressResponse,
     ResumeRequest,
     StopRequest,
+    TaskDeleteResponse,
+    TaskInitRequest,
+    TaskInitResponse,
     TaskOptionsResponse,
     TaskProgressInfo,
     TaskStatus,
     TaskStatusResponse,
     WorkflowStage,
 )
+from claude_task_master.core.agent import ModelType
 from claude_task_master.core.control import ControlManager
-from claude_task_master.core.state import StateManager
+from claude_task_master.core.credentials import CredentialManager
+from claude_task_master.core.state import StateManager, TaskOptions
 
 if TYPE_CHECKING:
     from fastapi import APIRouter, FastAPI, Query, Request
@@ -837,6 +852,211 @@ def create_control_router() -> APIRouter:
 
 
 # =============================================================================
+# Task Management Router (Init, Delete)
+# =============================================================================
+
+
+def create_task_router() -> APIRouter:
+    """Create router for task management endpoints.
+
+    These endpoints allow task lifecycle management including
+    initializing new tasks and deleting existing tasks.
+
+    Returns:
+        APIRouter configured with task management endpoints.
+
+    Raises:
+        ImportError: If FastAPI is not installed.
+    """
+    if not FASTAPI_AVAILABLE:
+        raise ImportError(
+            "FastAPI not installed. Install with: pip install claude-task-master[api]"
+        )
+
+    router = APIRouter(tags=["Task Management"])
+
+    @router.post(
+        "/task/init",
+        response_model=TaskInitResponse,
+        responses={
+            400: {"model": ErrorResponse, "description": "Invalid request or task already exists"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+        summary="Initialize Task",
+        description="Initialize a new task with the given goal and options.",
+    )
+    async def init_task(
+        request: Request, task_init: TaskInitRequest
+    ) -> TaskInitResponse | JSONResponse:
+        """Initialize a new task.
+
+        Creates a new task with the specified goal and configuration options.
+        The task will be in 'planning' status after initialization.
+
+        Args:
+            task_init: Task initialization request with goal and options.
+
+        Returns:
+            TaskInitResponse with initialization result including run_id.
+
+        Raises:
+            400: If a task already exists or request is invalid.
+            500: If an error occurs during initialization.
+        """
+        state_manager = _get_state_manager(request)
+
+        # Check if task already exists
+        if state_manager.exists():
+            return JSONResponse(
+                status_code=400,
+                content=ErrorResponse(
+                    error="task_exists",
+                    message="A task already exists",
+                    suggestion="Use DELETE /task to remove the existing task first",
+                ).model_dump(),
+            )
+
+        try:
+            # Validate model type
+            try:
+                ModelType(task_init.model)
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content=ErrorResponse(
+                        error="invalid_model",
+                        message=f"Invalid model '{task_init.model}'",
+                        detail="Model must be one of: opus, sonnet, haiku",
+                        suggestion="Use 'opus', 'sonnet', or 'haiku'",
+                    ).model_dump(),
+                )
+
+            # Load credentials to verify we can authenticate
+            try:
+                cred_manager = CredentialManager()
+                cred_manager.get_valid_token()
+            except Exception as e:
+                logger.exception("Failed to load credentials")
+                return JSONResponse(
+                    status_code=500,
+                    content=ErrorResponse(
+                        error="credentials_error",
+                        message="Failed to load Claude credentials",
+                        detail=str(e),
+                        suggestion="Ensure you have authenticated with 'claude auth'",
+                    ).model_dump(),
+                )
+
+            # Initialize task state
+            logger.info(f"Initializing new task: {task_init.goal}")
+            options = TaskOptions(
+                auto_merge=task_init.auto_merge,
+                max_sessions=task_init.max_sessions,
+                pause_on_pr=task_init.pause_on_pr,
+                enable_checkpointing=False,  # Default to False
+                log_level="normal",  # Default to normal
+                log_format="text",  # Default to text
+                pr_per_task=False,  # Default to False
+            )
+            state = state_manager.initialize(
+                goal=task_init.goal, model=task_init.model, options=options
+            )
+
+            logger.info(f"Task initialized with run_id: {state.run_id}")
+
+            return TaskInitResponse(
+                success=True,
+                message="Task initialized successfully",
+                run_id=state.run_id,
+                status=state.status,
+            )
+
+        except Exception as e:
+            logger.exception("Error initializing task")
+            return JSONResponse(
+                status_code=500,
+                content=ErrorResponse(
+                    error="internal_error",
+                    message="Failed to initialize task",
+                    detail=str(e),
+                ).model_dump(),
+            )
+
+    @router.delete(
+        "/task",
+        response_model=TaskDeleteResponse,
+        responses={
+            404: {"model": ErrorResponse, "description": "No active task found"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+        summary="Delete Task",
+        description="Delete the current task and cleanup all state files.",
+    )
+    async def delete_task(request: Request) -> TaskDeleteResponse | JSONResponse:
+        """Delete the current task.
+
+        Removes all task state files including plan, progress, context,
+        and state. This operation cannot be undone.
+
+        Returns:
+            TaskDeleteResponse with deletion result.
+
+        Raises:
+            404: If no active task exists.
+            500: If an error occurs during deletion.
+        """
+        state_manager = _get_state_manager(request)
+
+        if not state_manager.exists():
+            return JSONResponse(
+                status_code=404,
+                content=ErrorResponse(
+                    error="not_found",
+                    message="No active task found",
+                    suggestion="No task to delete",
+                ).model_dump(),
+            )
+
+        try:
+            # Check if session is active
+            is_active = state_manager.is_session_active()
+
+            if is_active:
+                logger.warning("Deleting task while session is active")
+                # Release session lock before deletion
+                state_manager.release_session_lock()
+
+            # Remove state directory
+            state_dir = state_manager.state_dir
+            if state_dir.exists():
+                shutil.rmtree(state_dir)
+                logger.info(f"Task state deleted: {state_dir}")
+                files_removed = True
+            else:
+                logger.warning(f"State directory not found: {state_dir}")
+                files_removed = False
+
+            return TaskDeleteResponse(
+                success=True,
+                message="Task deleted successfully",
+                files_removed=files_removed,
+            )
+
+        except Exception as e:
+            logger.exception("Error deleting task")
+            return JSONResponse(
+                status_code=500,
+                content=ErrorResponse(
+                    error="internal_error",
+                    message="Failed to delete task",
+                    detail=str(e),
+                ).model_dump(),
+            )
+
+    return router
+
+
+# =============================================================================
 # Router Registration
 # =============================================================================
 
@@ -858,5 +1078,10 @@ def register_routes(app: FastAPI) -> None:
     control_router = create_control_router()
     app.include_router(control_router)
 
+    # Create and register task management router
+    task_router = create_task_router()
+    app.include_router(task_router)
+
     logger.debug("Registered info routes: /status, /plan, /logs, /progress, /context, /health")
     logger.debug("Registered control routes: /control/stop, /control/resume, /config")
+    logger.debug("Registered task routes: /task/init, /task")
