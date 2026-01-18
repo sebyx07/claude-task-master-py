@@ -1,0 +1,123 @@
+# =============================================================================
+# Development Environment
+# =============================================================================
+# Development setup with:
+# - No authentication (for ease of development)
+# - Debug logging
+# - Volume mount for source code (hot reload)
+# - Development tools
+#
+# ⚠️ WARNING: DO NOT USE IN PRODUCTION
+# This configuration disables authentication and security features.
+#
+# Usage:
+#   docker compose -f development.yml up
+#   docker compose -f development.yml up --build  # Rebuild on changes
+#
+# =============================================================================
+
+version: "3.8"
+
+services:
+  claudetm-dev:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: development  # Use development stage if available
+    container_name: claudetm-dev
+    restart: "no"  # Don't auto-restart in dev
+
+    ports:
+      - "8000:8000"
+      - "8080:8080"
+
+    volumes:
+      # Source code (for hot reload if supported)
+      - ../../src:/app/src:ro
+      - ../../pyproject.toml:/app/pyproject.toml:ro
+
+      # Claude credentials
+      - "${CLAUDE_CREDENTIALS_PATH:-~/.claude}:/home/claudetm/.claude:ro"
+
+      # Project directory for testing
+      - "${PROJECT_PATH:-../../tmp/test-project}:/app/project"
+
+      # Git configuration
+      - "${HOME}/.gitconfig:/home/claudetm/.gitconfig:ro"
+
+      # GitHub CLI configuration
+      - "${HOME}/.config/gh:/home/claudetm/.config/gh:ro"
+
+    environment:
+      # No password in development (WARNING: insecure!)
+      - CLAUDETM_PASSWORD=${CLAUDETM_PASSWORD:-}
+
+      # Debug logging
+      - CLAUDETM_LOG_LEVEL=debug
+
+      # Server configuration
+      - CLAUDETM_SERVER_HOST=0.0.0.0
+      - CLAUDETM_REST_PORT=8000
+      - CLAUDETM_MCP_PORT=8080
+      - CLAUDETM_MCP_TRANSPORT=sse
+
+      # Development mode
+      - CLAUDETM_DEV_MODE=true
+      - PYTHONUNBUFFERED=1
+
+    # No health check in development
+    healthcheck:
+      disable: true
+
+    # Interactive terminal
+    stdin_open: true
+    tty: true
+
+    networks:
+      - claudetm-dev
+
+networks:
+  claudetm-dev:
+    driver: bridge
+
+# =============================================================================
+# Development Commands
+# =============================================================================
+#
+# Start development server:
+#   docker compose -f development.yml up
+#
+# Rebuild and start:
+#   docker compose -f development.yml up --build
+#
+# Run tests:
+#   docker compose -f development.yml exec claudetm-dev pytest
+#
+# Run linter:
+#   docker compose -f development.yml exec claudetm-dev ruff check .
+#
+# Format code:
+#   docker compose -f development.yml exec claudetm-dev ruff format .
+#
+# Type check:
+#   docker compose -f development.yml exec claudetm-dev mypy .
+#
+# Access shell:
+#   docker compose -f development.yml exec claudetm-dev bash
+#
+# View logs:
+#   docker compose -f development.yml logs -f
+#
+# Stop:
+#   docker compose -f development.yml down
+#
+# =============================================================================
+# Environment Variables (.env)
+# =============================================================================
+#
+# Optional for development:
+#   PROJECT_PATH=../../tmp/test-project
+#   CLAUDE_CREDENTIALS_PATH=~/.claude
+#   CLAUDETM_PASSWORD=dev-password  # Only if you want auth in dev
+#
+# =============================================================================
