@@ -161,3 +161,259 @@ class TestListTasksTool:
         completed_tasks = [t for t in result["tasks"] if t["completed"]]
         assert len(incomplete_tasks) == 3
         assert len(completed_tasks) == 1
+
+
+class TestStopTaskTool:
+    """Test the stop_task MCP tool."""
+
+    def test_stop_task_no_active_task(self, temp_dir):
+        """Test stop_task when no task exists."""
+        from claude_task_master.mcp.tools import stop_task
+
+        result = stop_task(temp_dir)
+        assert result["success"] is False
+        assert "No active task found" in result["message"]
+
+    def test_stop_task_success(self, initialized_state, state_dir):
+        """Test stop_task successfully stops a planning task."""
+        from claude_task_master.mcp.tools import stop_task
+
+        result = stop_task(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is True
+        assert result["previous_status"] == "planning"
+        assert result["new_status"] == "stopped"
+
+        # Verify state was updated
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        assert state.status == "stopped"
+
+    def test_stop_task_with_reason(self, initialized_state, state_dir):
+        """Test stop_task records reason in progress."""
+        from claude_task_master.mcp.tools import stop_task
+
+        result = stop_task(state_dir.parent, reason="User requested stop", state_dir=str(state_dir))
+        assert result["success"] is True
+        assert result["reason"] == "User requested stop"
+
+        # Verify reason was recorded in progress
+        state_manager = StateManager(state_dir=state_dir)
+        progress = state_manager.load_progress() or ""
+        assert "User requested stop" in progress
+
+    def test_stop_task_already_stopped(self, initialized_state, state_dir):
+        """Test stop_task fails if task is already stopped."""
+        from claude_task_master.mcp.tools import stop_task
+
+        # First stop it
+        stop_task(state_dir.parent, state_dir=str(state_dir))
+
+        # Try to stop again
+        result = stop_task(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is False
+        assert "stopped" in result["previous_status"]
+
+
+class TestResumeTaskTool:
+    """Test the resume_task MCP tool."""
+
+    def test_resume_task_no_active_task(self, temp_dir):
+        """Test resume_task when no task exists."""
+        from claude_task_master.mcp.tools import resume_task
+
+        result = resume_task(temp_dir)
+        assert result["success"] is False
+        assert "No active task found" in result["message"]
+
+    def test_resume_task_from_paused(self, initialized_state, state_dir):
+        """Test resume_task successfully resumes a paused task."""
+        from claude_task_master.mcp.tools import pause_task, resume_task
+
+        # First pause the task
+        pause_task(state_dir.parent, state_dir=str(state_dir))
+
+        # Then resume it
+        result = resume_task(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is True
+        assert result["previous_status"] == "paused"
+        assert result["new_status"] == "working"
+
+        # Verify state was updated
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        assert state.status == "working"
+
+    def test_resume_task_from_stopped(self, initialized_state, state_dir):
+        """Test resume_task successfully resumes a stopped task."""
+        from claude_task_master.mcp.tools import resume_task, stop_task
+
+        # First stop the task
+        stop_task(state_dir.parent, state_dir=str(state_dir))
+
+        # Then resume it
+        result = resume_task(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is True
+        assert result["previous_status"] == "stopped"
+        assert result["new_status"] == "working"
+
+        # Verify state was updated
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        assert state.status == "working"
+
+    def test_resume_task_from_working(self, initialized_state, state_dir):
+        """Test resume_task succeeds when task is already working (no-op transition)."""
+        from claude_task_master.mcp.tools import resume_task
+
+        # Set task status to working
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        state.status = "working"
+        state_manager.save_state(state)
+
+        # Resume from working -> working (allowed)
+        result = resume_task(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is True
+        assert result["previous_status"] == "working"
+        assert result["new_status"] == "working"
+
+    def test_resume_task_from_success_fails(self, initialized_state, state_dir):
+        """Test resume_task fails if task is in terminal 'success' state."""
+        from claude_task_master.mcp.tools import resume_task
+
+        # Set task status via valid transitions: planning -> working -> success
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        state.status = "working"
+        state_manager.save_state(state)
+        state = state_manager.load_state()
+        state.status = "success"
+        state_manager.save_state(state)
+
+        # Try to resume from terminal state
+        result = resume_task(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is False
+        assert result["previous_status"] == "success"
+
+    def test_resume_task_updates_progress(self, initialized_state, state_dir):
+        """Test resume_task adds entry to progress log."""
+        from claude_task_master.mcp.tools import pause_task, resume_task
+
+        # Pause then resume
+        pause_task(state_dir.parent, state_dir=str(state_dir))
+        resume_task(state_dir.parent, state_dir=str(state_dir))
+
+        # Verify progress was updated
+        state_manager = StateManager(state_dir=state_dir)
+        progress = state_manager.load_progress() or ""
+        assert "Resumed" in progress
+
+
+class TestUpdateConfigTool:
+    """Test the update_config MCP tool."""
+
+    def test_update_config_no_active_task(self, temp_dir):
+        """Test update_config when no task exists."""
+        from claude_task_master.mcp.tools import update_config
+
+        result = update_config(temp_dir, max_sessions=10)
+        assert result["success"] is False
+        assert "No active task found" in result["message"]
+
+    def test_update_config_no_options_provided(self, initialized_state, state_dir):
+        """Test update_config when no options are provided."""
+        from claude_task_master.mcp.tools import update_config
+
+        result = update_config(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is False
+        assert "No configuration options provided" in result["message"]
+
+    def test_update_config_single_option(self, initialized_state, state_dir):
+        """Test update_config updates a single option."""
+        from claude_task_master.mcp.tools import update_config
+
+        # Note: initialized_state fixture sets max_sessions=10 by default,
+        # so we use a different value here (20)
+        result = update_config(
+            state_dir.parent,
+            max_sessions=20,
+            state_dir=str(state_dir),
+        )
+        assert result["success"] is True
+        assert "max_sessions" in result["message"]
+        assert result["updated"]["max_sessions"] == 20
+
+        # Verify state was updated
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        assert state.options.max_sessions == 20
+
+    def test_update_config_multiple_options(self, initialized_state, state_dir):
+        """Test update_config updates multiple options."""
+        from claude_task_master.mcp.tools import update_config
+
+        result = update_config(
+            state_dir.parent,
+            max_sessions=5,
+            auto_merge=False,
+            pause_on_pr=True,
+            state_dir=str(state_dir),
+        )
+        assert result["success"] is True
+        assert result["updated"]["max_sessions"] == 5
+        assert result["updated"]["auto_merge"] is False
+        assert result["updated"]["pause_on_pr"] is True
+
+        # Verify state was updated
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        assert state.options.max_sessions == 5
+        assert state.options.auto_merge is False
+        assert state.options.pause_on_pr is True
+
+    def test_update_config_no_change_when_same_value(self, initialized_state, state_dir):
+        """Test update_config reports no change when value is already set."""
+        from claude_task_master.mcp.tools import update_config
+
+        # Initial state has auto_merge=True by default
+        result = update_config(
+            state_dir.parent,
+            auto_merge=True,
+            state_dir=str(state_dir),
+        )
+        assert result["success"] is True
+        # Updated should be empty dict since value didn't change
+        assert result["updated"] == {}
+        assert "No configuration changes needed" in result["message"]
+
+    def test_update_config_log_level(self, initialized_state, state_dir):
+        """Test update_config updates log_level option."""
+        from claude_task_master.mcp.tools import update_config
+
+        result = update_config(
+            state_dir.parent,
+            log_level="verbose",
+            state_dir=str(state_dir),
+        )
+        assert result["success"] is True
+        assert result["updated"]["log_level"] == "verbose"
+
+        # Verify state was updated
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        assert state.options.log_level == "verbose"
+
+    def test_update_config_returns_current_config(self, initialized_state, state_dir):
+        """Test update_config returns current configuration in response."""
+        from claude_task_master.mcp.tools import update_config
+
+        result = update_config(
+            state_dir.parent,
+            max_sessions=15,
+            state_dir=str(state_dir),
+        )
+        assert result["success"] is True
+        assert result["current"] is not None
+        assert "auto_merge" in result["current"]
+        assert "max_sessions" in result["current"]
+        assert result["current"]["max_sessions"] == 15
