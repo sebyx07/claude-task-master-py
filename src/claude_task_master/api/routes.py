@@ -12,6 +12,7 @@ Endpoints:
 - GET /health: Health check endpoint
 - POST /control/stop: Stop a running task with optional cleanup
 - POST /control/resume: Resume a paused or blocked task
+- PATCH /config: Update runtime configuration options
 
 Usage:
     from claude_task_master.api.routes import create_info_router, create_control_router
@@ -32,6 +33,7 @@ from typing import TYPE_CHECKING
 
 from claude_task_master import __version__
 from claude_task_master.api.models import (
+    ConfigUpdateRequest,
     ContextResponse,
     ControlResponse,
     ErrorResponse,
@@ -726,6 +728,111 @@ def create_control_router() -> APIRouter:
                 ).model_dump(),
             )
 
+    @router.patch(
+        "/config",
+        response_model=ControlResponse,
+        responses={
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid configuration or no updates provided",
+            },
+            404: {"model": ErrorResponse, "description": "No active task found"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+        summary="Update Configuration",
+        description="Update runtime task configuration options.",
+    )
+    async def update_config(
+        request: Request, config_update: ConfigUpdateRequest
+    ) -> ControlResponse | JSONResponse:
+        """Update task configuration at runtime.
+
+        Updates the specified configuration options for the current task.
+        Only the fields specified in the request are updated; all other
+        configuration options retain their current values.
+
+        Supported options:
+        - auto_merge: Whether to auto-merge PRs when approved
+        - max_sessions: Maximum number of work sessions before pausing
+        - pause_on_pr: Whether to pause after creating PR for manual review
+        - enable_checkpointing: Whether to enable state checkpointing
+        - log_level: Log level (quiet, normal, verbose)
+        - log_format: Log format (text, json)
+        - pr_per_task: Whether to create PR per task vs per group
+
+        Args:
+            config_update: Configuration update request with fields to update.
+
+        Returns:
+            ControlResponse with operation result including updated values.
+
+        Raises:
+            404: If no active task exists.
+            400: If no configuration updates were provided or invalid values.
+            500: If an error occurs during the operation.
+        """
+        state_manager = _get_state_manager(request)
+
+        if not state_manager.exists():
+            return JSONResponse(
+                status_code=404,
+                content=ErrorResponse(
+                    error="not_found",
+                    message="No active task found",
+                    suggestion="Start a new task with 'claudetm start <goal>'",
+                ).model_dump(),
+            )
+
+        # Validate that at least one field is being updated
+        if not config_update.has_updates():
+            return JSONResponse(
+                status_code=400,
+                content=ErrorResponse(
+                    error="invalid_request",
+                    message="No configuration updates provided",
+                    suggestion="Specify at least one configuration field to update",
+                ).model_dump(),
+            )
+
+        try:
+            # Create control manager and perform config update
+            control = ControlManager(state_manager=state_manager)
+
+            # Convert config update to kwargs dictionary
+            update_kwargs = config_update.to_update_dict()
+            result = control.update_config(**update_kwargs)
+
+            return ControlResponse(
+                success=result.success,
+                message=result.message,
+                operation=result.operation,
+                previous_status=result.previous_status,
+                new_status=result.new_status,
+                details=result.details,
+            )
+
+        except ValueError as e:
+            logger.exception("Invalid configuration update")
+            return JSONResponse(
+                status_code=400,
+                content=ErrorResponse(
+                    error="invalid_configuration",
+                    message="Invalid configuration option",
+                    detail=str(e),
+                ).model_dump(),
+            )
+
+        except Exception as e:
+            logger.exception("Error updating configuration")
+            return JSONResponse(
+                status_code=500,
+                content=ErrorResponse(
+                    error="internal_error",
+                    message="Failed to update configuration",
+                    detail=str(e),
+                ).model_dump(),
+            )
+
     return router
 
 
@@ -752,4 +859,4 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(control_router)
 
     logger.debug("Registered info routes: /status, /plan, /logs, /progress, /context, /health")
-    logger.debug("Registered control routes: /control/stop, /control/resume")
+    logger.debug("Registered control routes: /control/stop, /control/resume, /config")
