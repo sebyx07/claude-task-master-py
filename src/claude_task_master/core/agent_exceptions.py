@@ -155,6 +155,24 @@ TRANSIENT_ERRORS = (
     APIServerError,
 )
 
+
+class ConsecutiveFailuresError(AgentError):
+    """Raised when too many consecutive API failures occur.
+
+    This error is raised when the retry logic detects 3 consecutive
+    API failures within a short time window, indicating persistent issues.
+    """
+
+    def __init__(self, failure_count: int, last_error: Exception | None = None):
+        self.failure_count = failure_count
+        self.last_error = last_error
+        details = str(last_error) if last_error else None
+        super().__init__(
+            f"API failed {failure_count} consecutive times - stopping execution",
+            details,
+        )
+
+
 # All exception classes for easy imports
 __all__ = [
     "AgentError",
@@ -168,5 +186,6 @@ __all__ = [
     "APIServerError",
     "ContentFilterError",
     "WorkingDirectoryError",
+    "ConsecutiveFailuresError",
     "TRANSIENT_ERRORS",
 ]

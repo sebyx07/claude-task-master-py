@@ -50,7 +50,10 @@ class TestSDKErrorRecovery:
         monkeypatch,
     ):
         """Test that rate limit errors trigger retry logic."""
+        from unittest.mock import AsyncMock, patch
+
         from claude_task_master.core.agent import ModelType
+        from claude_task_master.core.agent_exceptions import ConsecutiveFailuresError
 
         monkeypatch.chdir(integration_temp_dir)
 
@@ -65,15 +68,17 @@ class TestSDKErrorRecovery:
                 model=ModelType.SONNET,
                 working_dir=str(integration_temp_dir),
             )
-            # Try to run a query
+            # Try to run a query (with mocked sleep to avoid timeouts)
             import asyncio
 
-            asyncio.run(agent._run_query("test prompt", ["Read"]))
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                asyncio.run(agent._run_query("test prompt", ["Read"]))
 
-        # Should have hit the rate limit error
+        # Should have hit the rate limit error or consecutive failures
         assert "rate" in str(exc_info.value).lower() or exc_info.type in [
             Exception,
             APIRateLimitError,
+            ConsecutiveFailuresError,
         ]
 
     def test_auth_error_is_not_retried(

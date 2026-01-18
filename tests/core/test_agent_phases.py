@@ -466,7 +466,10 @@ class TestAgentWrapperRunPlanningPhase:
 """
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = mock_result
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value=mock_result):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value=mock_result,
+            ):
                 result = agent_with_mock.run_planning_phase("Build API")
 
         assert isinstance(result, dict)
@@ -483,7 +486,10 @@ class TestAgentWrapperRunPlanningPhase:
 """
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = mock_result
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value=mock_result):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value=mock_result,
+            ):
                 result = agent_with_mock.run_planning_phase("Goal")
 
         assert "plan" in result
@@ -500,7 +506,9 @@ class TestAgentWrapperRunPlanningPhase:
 
             mock_query.side_effect = run_query_capture
 
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup") as mock_asyncio:
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup"
+            ) as mock_asyncio:
                 mock_asyncio.return_value = "test result"
                 agent_with_mock.run_planning_phase("Goal")
 
@@ -519,7 +527,10 @@ class TestAgentWrapperRunPlanningPhase:
 """
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = mock_result
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value=mock_result):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value=mock_result,
+            ):
                 result = agent_with_mock.run_planning_phase("Goal", context="Previous info")
 
         assert result is not None
@@ -540,7 +551,10 @@ class TestAgentWrapperRunPlanningPhase:
 """
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = mock_result
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value=mock_result):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value=mock_result,
+            ):
                 result = agent_with_mock.run_planning_phase("Build API")
 
         assert "Setup database" in result["plan"]
@@ -575,7 +589,10 @@ class TestAgentWrapperRunWorkSession:
         """Test run_work_session returns a dictionary."""
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "Work completed"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Work completed"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value="Work completed",
+            ):
                 result = agent_with_mock.run_work_session("Implement feature")
 
         assert isinstance(result, dict)
@@ -584,7 +601,9 @@ class TestAgentWrapperRunWorkSession:
         """Test run_work_session returns required keys."""
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "Done"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"
+            ):
                 result = agent_with_mock.run_work_session("Task")
 
         assert "output" in result
@@ -594,7 +613,9 @@ class TestAgentWrapperRunWorkSession:
         """Test run_work_session assumes success for MVP."""
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "Done"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"
+            ):
                 result = agent_with_mock.run_work_session("Task")
 
         assert result["success"] is True
@@ -603,7 +624,9 @@ class TestAgentWrapperRunWorkSession:
         """Test run_work_session includes context."""
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "Done"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"
+            ):
                 result = agent_with_mock.run_work_session("Task", context="Previous work info")
 
         assert result is not None
@@ -612,7 +635,9 @@ class TestAgentWrapperRunWorkSession:
         """Test run_work_session includes PR comments."""
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "Done"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"
+            ):
                 result = agent_with_mock.run_work_session(
                     "Task", pr_comments="Fix the error handling"
                 )
@@ -624,7 +649,10 @@ class TestAgentWrapperRunWorkSession:
         expected_output = "Implemented the feature successfully with all tests passing."
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = expected_output
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value=expected_output):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value=expected_output,
+            ):
                 result = agent_with_mock.run_work_session("Implement feature")
 
         assert result["output"] == expected_output
@@ -657,7 +685,10 @@ class TestAgentWrapperVerifySuccessCriteria:
         """Test verify_success_criteria returns a dictionary."""
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "All criteria met."
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="All criteria met."):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value="All criteria met.",
+            ):
                 result = agent_with_mock.verify_success_criteria("Tests pass")
 
         assert isinstance(result, dict)
@@ -666,7 +697,10 @@ class TestAgentWrapperVerifySuccessCriteria:
         """Test verify_success_criteria returns required keys."""
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "Success"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Success"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value="Success",
+            ):
                 result = agent_with_mock.verify_success_criteria("Tests pass")
 
         assert "success" in result
@@ -688,7 +722,10 @@ class TestAgentWrapperVerifySuccessCriteria:
         """Test verify_success_criteria detects failure."""
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "Some criteria are not met. Tests are failing."
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Some criteria are not met. Tests are failing."):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value="Some criteria are not met. Tests are failing.",
+            ):
                 result = agent_with_mock.verify_success_criteria("Tests pass")
 
         assert result["success"] is False
@@ -697,7 +734,10 @@ class TestAgentWrapperVerifySuccessCriteria:
         """Test verify_success_criteria uses context."""
         with patch.object(agent_with_mock, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "Success confirmed"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Success confirmed"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value="Success confirmed",
+            ):
                 result = agent_with_mock.verify_success_criteria(
                     "Tests pass", context="Additional context info"
                 )
@@ -755,7 +795,10 @@ class TestAgentWrapperPhaseIntegration:
         with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
             # Test planning
             mock_query.return_value = planning_result
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value=planning_result):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value=planning_result,
+            ):
                 plan = agent.run_planning_phase("Build a library")
 
             assert "plan" in plan
@@ -763,14 +806,20 @@ class TestAgentWrapperPhaseIntegration:
 
             # Test work session
             mock_query.return_value = work_result
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value=work_result):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value=work_result,
+            ):
                 work = agent.run_work_session("Implement feature")
 
             assert work["success"] is True
 
             # Test verification
             mock_query.return_value = verification_result
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value=verification_result):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value=verification_result,
+            ):
                 verification = agent.verify_success_criteria("All tests pass")
 
             assert verification["success"] is True
@@ -783,7 +832,10 @@ class TestAgentWrapperPhaseIntegration:
 
             for task in tasks:
                 mock_query.return_value = f"Completed {task}"
-                with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value=f"Completed {task}"):
+                with patch(
+                    "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                    return_value=f"Completed {task}",
+                ):
                     result = agent.run_work_session(task)
                     results.append(result)
 
@@ -805,7 +857,10 @@ class TestAgentWrapperPhaseIntegration:
         with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
             # Planning phase
             mock_query.return_value = planning_result
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value=planning_result):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value=planning_result,
+            ):
                 plan = agent.run_planning_phase("Complete project")
 
             # Parse tasks from plan
@@ -814,7 +869,10 @@ class TestAgentWrapperPhaseIntegration:
 
             # Execute tasks
             mock_query.return_value = "Task completed"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Task completed"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value="Task completed",
+            ):
                 work_a = agent.run_work_session("Task A")
                 work_b = agent.run_work_session("Task B")
 
@@ -849,7 +907,10 @@ class TestAgentWrapperPhaseEdgeCases:
         """Test planning with empty goal."""
         with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "## Task List\n- [ ] Task"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="## Task List\n- [ ] Task"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value="## Task List\n- [ ] Task",
+            ):
                 result = agent.run_planning_phase("")
 
         assert result is not None
@@ -858,7 +919,9 @@ class TestAgentWrapperPhaseEdgeCases:
         """Test work session with empty task description."""
         with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "Done"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"
+            ):
                 result = agent.run_work_session("")
 
         assert result["success"] is True
@@ -868,7 +931,10 @@ class TestAgentWrapperPhaseEdgeCases:
         long_goal = "A" * 10000
         with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "## Task List\n- [ ] Task"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="## Task List\n- [ ] Task"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value="## Task List\n- [ ] Task",
+            ):
                 result = agent.run_planning_phase(long_goal)
 
         assert result is not None
@@ -878,7 +944,9 @@ class TestAgentWrapperPhaseEdgeCases:
         task = "Implement <feature> with 'quotes' and \"double quotes\" & special chars @#$%"
         with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "Done"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"
+            ):
                 result = agent.run_work_session(task)
 
         assert result["success"] is True
@@ -888,7 +956,9 @@ class TestAgentWrapperPhaseEdgeCases:
         context = "Context with unicode: \u65e5\u672c\u8a9e, emoji \U0001f680, and symbols \u2660\u2663\u2665\u2666"
         with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "Done"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"
+            ):
                 result = agent.run_work_session("Task", context=context)
 
         assert result["success"] is True
@@ -905,7 +975,9 @@ Also consider:
 """
         with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "Done"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="Done"
+            ):
                 result = agent.run_work_session("Task", pr_comments=pr_comments)
 
         assert result["success"] is True
@@ -914,7 +986,10 @@ Also consider:
         """Test verification detects lowercase 'success'."""
         with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "The implementation is a success."
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="The implementation is a success."):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value="The implementation is a success.",
+            ):
                 result = agent.verify_success_criteria("Tests pass")
 
         assert result["success"] is True
@@ -923,7 +998,10 @@ Also consider:
         """Test verification detects 'ALL CRITERIA MET'."""
         with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "All Criteria Met successfully"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="All Criteria Met successfully"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value="All Criteria Met successfully",
+            ):
                 result = agent.verify_success_criteria("Tests pass")
 
         # Note: the check is case-insensitive because of .lower()
@@ -933,7 +1011,10 @@ Also consider:
         """Test verification with empty criteria."""
         with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "All criteria met"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="All criteria met"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value="All criteria met",
+            ):
                 result = agent.verify_success_criteria("")
 
         assert result is not None
@@ -943,7 +1024,10 @@ Also consider:
         long_criteria = "Criterion: " + "x" * 5000
         with patch.object(agent, "_run_query", new_callable=AsyncMock) as mock_query:
             mock_query.return_value = "All criteria met"
-            with patch("claude_task_master.core.agent_phases.run_async_with_cleanup", return_value="All criteria met"):
+            with patch(
+                "claude_task_master.core.agent_phases.run_async_with_cleanup",
+                return_value="All criteria met",
+            ):
                 result = agent.verify_success_criteria(long_criteria)
 
         assert result is not None

@@ -10,6 +10,7 @@ following the Single Responsibility Principle (SRP). It handles:
 
 import asyncio
 import os
+import time
 from typing import TYPE_CHECKING, Any
 
 from . import console
@@ -21,6 +22,7 @@ from .agent_exceptions import (
     APIRateLimitError,
     APIServerError,
     APITimeoutError,
+    ConsecutiveFailuresError,
     ContentFilterError,
     QueryExecutionError,
     SDKImportError,
@@ -80,6 +82,11 @@ class AgentQueryExecutor:
         self.hooks = hooks
         self.logger = logger
 
+        # Track consecutive failures within a time window
+        self._consecutive_failures = 0
+        self._first_failure_time: float | None = None
+        self._failure_window = 60.0  # 1 minute window
+
     async def run_query(
         self,
         prompt: str,
@@ -116,6 +123,48 @@ class AgentQueryExecutor:
             process_message_func,
         )
 
+    def _record_failure(self, error: Exception) -> None:
+        """Record a failure and check if we've exceeded the threshold.
+
+        Tracks consecutive failures within a 1-minute window. If 3 failures
+        occur within this window, raises ConsecutiveFailuresError.
+
+        Args:
+            error: The error that caused the failure.
+
+        Raises:
+            ConsecutiveFailuresError: If 3 failures occur within 1 minute.
+        """
+        current_time = time.time()
+
+        # Check if we're still within the failure window
+        if self._first_failure_time is not None:
+            time_since_first = current_time - self._first_failure_time
+            if time_since_first > self._failure_window:
+                # Window expired, reset counter
+                self._consecutive_failures = 0
+                self._first_failure_time = None
+
+        # Record this failure
+        if self._first_failure_time is None:
+            self._first_failure_time = current_time
+
+        self._consecutive_failures += 1
+
+        # Check if we've hit the threshold
+        if self._consecutive_failures >= 3:
+            console.newline()
+            console.error(
+                "API failed 3 consecutive times within 1 minute - stopping execution",
+                flush=True,
+            )
+            raise ConsecutiveFailuresError(3, error)
+
+    def _reset_failures(self) -> None:
+        """Reset the failure counter after a successful query."""
+        self._consecutive_failures = 0
+        self._first_failure_time = None
+
     async def _run_query_with_retry(
         self,
         prompt: str,
@@ -125,10 +174,11 @@ class AgentQueryExecutor:
         get_agents_func: Any = None,
         process_message_func: Any = None,
     ) -> str:
-        """Execute query with exponential backoff retry for transient errors.
+        """Execute query with retry logic for transient errors.
 
-        Uses circuit breaker pattern to prevent cascading failures when the
-        API is consistently failing.
+        Uses a fixed 5-second delay between retries. If 3 consecutive errors
+        occur within a 1-minute window, raises ConsecutiveFailuresError to
+        signal the orchestrator to exit with blocked status.
 
         Args:
             prompt: The prompt to send to the model.
@@ -143,7 +193,7 @@ class AgentQueryExecutor:
 
         Raises:
             WorkingDirectoryError: If working directory cannot be accessed.
-            QueryExecutionError: If the query fails after all retries.
+            ConsecutiveFailuresError: If 3 consecutive API errors occur within 1 minute.
             CircuitBreakerError: If circuit breaker is open.
         """
         # Check circuit breaker state first
@@ -158,14 +208,13 @@ class AgentQueryExecutor:
                 time_until_retry,
             )
 
-        last_error: Exception | None = None
-        max_retries = self.rate_limit_config.max_retries
+        retry_delay = 5.0  # seconds
 
-        for attempt in range(max_retries + 1):
+        while True:
             try:
                 # Execute through circuit breaker
                 with self.circuit_breaker:
-                    return await self._execute_query(
+                    result = await self._execute_query(
                         prompt,
                         tools,
                         model_override,
@@ -173,30 +222,25 @@ class AgentQueryExecutor:
                         get_agents_func,
                         process_message_func,
                     )
+                    # Success - reset failure counter
+                    self._reset_failures()
+                    return result
             except CircuitBreakerError:
                 # Circuit breaker tripped - don't retry
                 console.warning("Circuit breaker opened due to repeated failures")
                 raise
             except TRANSIENT_ERRORS as e:
-                last_error = e
-                if attempt < max_retries:
-                    # Calculate backoff using rate limit config
-                    sleep_time = self.rate_limit_config.calculate_backoff(attempt)
-                    console.newline()
-                    console.warning(
-                        f"Transient error (attempt {attempt + 1}/{max_retries + 1}): {e.message}",
-                        flush=True,
-                    )
-                    console.detail(f"Retrying in {sleep_time:.1f} seconds...", flush=True)
-                    await asyncio.sleep(sleep_time)
-                else:
-                    # Out of retries
-                    console.newline()
-                    console.error(
-                        f"Failed after {max_retries + 1} attempts: {e.message}",
-                        flush=True,
-                    )
-                    raise
+                # Record failure (may raise ConsecutiveFailuresError)
+                self._record_failure(e)
+
+                # Still under threshold, retry
+                console.newline()
+                console.warning(
+                    f"API error ({self._consecutive_failures}/3 in window): {e.message}",
+                    flush=True,
+                )
+                console.detail(f"Retrying in {retry_delay:.0f} seconds...", flush=True)
+                await asyncio.sleep(retry_delay)
             except (
                 APIAuthenticationError,
                 ContentFilterError,
@@ -209,16 +253,17 @@ class AgentQueryExecutor:
                 # Other agent errors - re-raise as is
                 raise
             except Exception as e:
-                # Unexpected errors - wrap and raise
-                raise QueryExecutionError(
-                    f"Unexpected error during query execution: {type(e).__name__}",
-                    e,
-                ) from e
+                # Unexpected errors count toward consecutive failures
+                self._record_failure(e)
 
-        # Should not reach here, but just in case
-        if last_error:
-            raise last_error
-        raise QueryExecutionError("Query failed with unknown error")
+                # Still under threshold, retry
+                console.newline()
+                console.warning(
+                    f"Unexpected error ({self._consecutive_failures}/3 in window): {type(e).__name__}: {e}",
+                    flush=True,
+                )
+                console.detail(f"Retrying in {retry_delay:.0f} seconds...", flush=True)
+                await asyncio.sleep(retry_delay)
 
     async def _execute_query(
         self,

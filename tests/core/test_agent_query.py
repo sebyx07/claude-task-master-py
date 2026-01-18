@@ -19,6 +19,7 @@ from claude_task_master.core.agent_exceptions import (
     APIRateLimitError,
     APIServerError,
     APITimeoutError,
+    ConsecutiveFailuresError,
     ContentFilterError,
     QueryExecutionError,
 )
@@ -285,7 +286,8 @@ class TestAgentWrapperRetryLogic:
         agent.query = mock_query_gen
         agent._query_executor.query = mock_query_gen
 
-        await agent._run_query("test prompt", ["Read"])
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await agent._run_query("test prompt", ["Read"])
 
         # Should have retried twice before succeeding
         assert call_count == 3
@@ -305,7 +307,8 @@ class TestAgentWrapperRetryLogic:
         agent.query = mock_query_gen
         agent._query_executor.query = mock_query_gen
 
-        await agent._run_query("test prompt", ["Read"])
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await agent._run_query("test prompt", ["Read"])
 
         assert call_count == 2
 
@@ -324,7 +327,8 @@ class TestAgentWrapperRetryLogic:
         agent.query = mock_query_gen
         agent._query_executor.query = mock_query_gen
 
-        await agent._run_query("test prompt", ["Read"])
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await agent._run_query("test prompt", ["Read"])
 
         assert call_count == 2
 
@@ -343,7 +347,8 @@ class TestAgentWrapperRetryLogic:
         agent.query = mock_query_gen
         agent._query_executor.query = mock_query_gen
 
-        await agent._run_query("test prompt", ["Read"])
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await agent._run_query("test prompt", ["Read"])
 
         assert call_count == 2
 
@@ -369,7 +374,7 @@ class TestAgentWrapperRetryLogic:
 
     @pytest.mark.asyncio
     async def test_max_retries_exceeded(self, agent, temp_dir):
-        """Test that error is raised after max retries."""
+        """Test that ConsecutiveFailuresError is raised after 3 consecutive failures."""
         call_count = 0
 
         async def mock_query_gen(*args, **kwargs):
@@ -381,11 +386,12 @@ class TestAgentWrapperRetryLogic:
         agent.query = mock_query_gen
         agent._query_executor.query = mock_query_gen
 
-        with pytest.raises(APIRateLimitError):
-            await agent._run_query("test prompt", ["Read"])
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            with pytest.raises(ConsecutiveFailuresError):
+                await agent._run_query("test prompt", ["Read"])
 
-        # Should be called max_retries + 1 times
-        assert call_count == 3  # 2 retries + 1 initial
+        # Should be called 3 times (3 consecutive failures)
+        assert call_count == 3
 
     @pytest.mark.asyncio
     async def test_successful_first_attempt_no_retry(self, agent, temp_dir):

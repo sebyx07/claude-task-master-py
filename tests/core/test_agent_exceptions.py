@@ -607,8 +607,8 @@ class TestModuleExports:
 
     def test_all_has_expected_length(self):
         """Test __all__ has expected number of exports."""
-        # 11 exception classes + TRANSIENT_ERRORS
-        assert len(__all__) == 12
+        # 12 exception classes + TRANSIENT_ERRORS
+        assert len(__all__) == 13
 
     def test_exported_classes_are_importable(self):
         """Test all exported names can be imported."""

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from . import console
 from .agent import AgentWrapper
-from .agent_exceptions import AgentError, ContentFilterError
+from .agent_exceptions import AgentError, ConsecutiveFailuresError, ContentFilterError
 from .circuit_breaker import CircuitBreakerError
 from .key_listener import (
     get_cancellation_reason,
@@ -358,6 +358,11 @@ class WorkLoopOrchestrator:
             return 1
         except CircuitBreakerError as e:
             console.warning(f"Circuit breaker: {e.message}")
+            state.status = "blocked"
+            self.state_manager.save_state(state)
+            return 1
+        except ConsecutiveFailuresError as e:
+            console.error(f"Consecutive failures: {e.message}")
             state.status = "blocked"
             self.state_manager.save_state(state)
             return 1
