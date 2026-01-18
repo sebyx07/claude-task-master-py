@@ -416,10 +416,12 @@ def fix_pr(
                 state_manager.release_session_lock()
                 raise typer.Exit(0)
 
-            # Wait for mergeable status if UNKNOWN (GitHub needs time to compute)
+            # Wait for mergeable status if UNKNOWN or None (GitHub needs time to compute)
             merge_attempts = 0
             max_merge_attempts = 6  # 60 seconds total
-            while status.mergeable == "UNKNOWN" and merge_attempts < max_merge_attempts:
+            while (
+                status.mergeable == "UNKNOWN" or status.mergeable is None
+            ) and merge_attempts < max_merge_attempts:
                 merge_attempts += 1
                 console.print(
                     f"  ⏳ Waiting for mergeable status... ({merge_attempts}/{max_merge_attempts})"
@@ -428,7 +430,7 @@ def fix_pr(
                 status = github_client.get_pr_status(pr_number)
 
             # Check if ready to merge
-            if status.mergeable == "MERGEABLE" or status.mergeable is None:
+            if status.mergeable == "MERGEABLE":
                 console.print(f"\n[bold]Merging PR #{pr_number}...[/bold]")
                 try:
                     github_client.merge_pr(pr_number)
@@ -444,6 +446,13 @@ def fix_pr(
                 console.print(
                     f"\n[yellow]PR #{pr_number} has merge conflicts - manual resolution required[/yellow]"
                 )
+                state_manager.release_session_lock()
+                raise typer.Exit(1)
+            elif status.mergeable is None:
+                console.print(
+                    f"\n[yellow]PR #{pr_number} mergeability unknown - please check GitHub[/yellow]"
+                )
+                console.print("You can merge manually once GitHub computes the status.")
                 state_manager.release_session_lock()
                 raise typer.Exit(1)
             else:
