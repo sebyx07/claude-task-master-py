@@ -43,7 +43,8 @@ from claude_task_master.api.models import (
 from claude_task_master.core.state import StateManager
 
 if TYPE_CHECKING:
-    from fastapi import FastAPI
+    from fastapi import APIRouter, FastAPI, Query, Request
+    from fastapi.responses import JSONResponse
 
 # Import FastAPI - using try/except for graceful degradation
 try:
@@ -52,10 +53,6 @@ try:
 
     FASTAPI_AVAILABLE = True
 except ImportError:
-    APIRouter = None  # type: ignore[assignment,misc]
-    Query = None  # type: ignore[assignment]
-    Request = None  # type: ignore[assignment,misc]
-    JSONResponse = None  # type: ignore[assignment,misc]
     FASTAPI_AVAILABLE = False
 
 logger = logging.getLogger(__name__)

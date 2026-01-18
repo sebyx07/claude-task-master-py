@@ -26,11 +26,15 @@ import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from claude_task_master import __version__
 from claude_task_master.api.models import APIInfo
 from claude_task_master.api.routes import register_routes
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+    from fastapi.middleware.cors import CORSMiddleware
 
 # Import FastAPI - using try/except for graceful degradation
 try:
@@ -39,8 +43,6 @@ try:
 
     FASTAPI_AVAILABLE = True
 except ImportError:
-    FastAPI = None  # type: ignore[assignment,misc]
-    CORSMiddleware = None  # type: ignore[assignment,misc]
     FASTAPI_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
@@ -114,7 +116,7 @@ def _configure_cors(app: FastAPI, origins: list[str] | None = None) -> None:
         app: The FastAPI application instance.
         origins: List of allowed origins. If None, uses CORS_ORIGINS env var.
     """
-    if CORSMiddleware is None:
+    if not FASTAPI_AVAILABLE:
         logger.warning("CORS middleware not available (FastAPI not installed)")
         return
 
@@ -165,7 +167,7 @@ def create_app(
         >>> app = create_app()
         >>> # Use with uvicorn: uvicorn.run(app, host="0.0.0.0", port=8000)
     """
-    if FastAPI is None:
+    if not FASTAPI_AVAILABLE:
         raise ImportError(
             "FastAPI not installed. Install with: pip install claude-task-master[api]"
         )
