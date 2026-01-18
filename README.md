@@ -290,6 +290,17 @@ To use OpenRouter instead of direct Anthropic API:
 CLAUDETM_DEBUG=1 claudetm status
 ```
 
+## Documentation
+
+Complete documentation for all features and deployment options:
+
+| Guide | Description |
+|-------|-------------|
+| **[Docker Deployment](./docs/docker.md)** | Docker installation, configuration, volume mounts, and production deployment |
+| **[Authentication](./docs/authentication.md)** | Password-based authentication for REST API, MCP server, and webhooks |
+| **[REST API Reference](./docs/api-reference.md)** | Complete REST API endpoint documentation with examples |
+| **[Webhooks](./docs/webhooks.md)** | Webhook events, payload formats, HMAC signature verification, and integration examples |
+
 ## Usage
 
 ### CLI Commands
@@ -497,6 +508,49 @@ claudetm context
 ## Architecture
 
 The system follows SOLID principles with strict Single Responsibility:
+
+### Server Architecture
+
+When running with the unified server (`claudetm-server`), the following components work together:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Claude Task Master Server                       │
+│                                                                       │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐             │
+│  │  REST API    │   │  MCP Server  │   │   Webhooks   │             │
+│  │  (FastAPI)   │   │  (FastMCP)   │   │   (httpx)    │             │
+│  └──────┬───────┘   └──────┬───────┘   └──────┬───────┘             │
+│         │                  │                  │                      │
+│         └──────────────────┼──────────────────┘                      │
+│                            │                                         │
+│                    ┌───────▼───────┐                                 │
+│                    │ Auth Module   │                                 │
+│                    │ (Password)    │                                 │
+│                    └───────────────┘                                 │
+└─────────────────────────────────────────────────────────────────────┘
+
+Docker Container:
+┌─────────────────────────────────────────────────────────────────────┐
+│  claudetm-server                                                     │
+│                                                                       │
+│  Volumes:                                                            │
+│  - /app/project → project directory                                 │
+│  - /root/.claude → Claude credentials (~/.claude)                   │
+│                                                                       │
+│  Env: CLAUDETM_PASSWORD, CLAUDETM_WEBHOOK_URL, ...                   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Server Features:**
+- **REST API** - Create and manage tasks, view status, manage webhooks
+- **MCP Server** - Claude editor integration for native IDE support
+- **Webhooks** - Send notifications on task events with HMAC verification
+- **Unified Authentication** - Single password protects all three interfaces
+- **Docker Ready** - Multi-arch image published to GitHub Container Registry
+
+For detailed Docker deployment, see [Docker Deployment Guide](./docs/docker.md).
+For authentication details, see [Authentication Guide](./docs/authentication.md).
 
 ### Core Components
 
