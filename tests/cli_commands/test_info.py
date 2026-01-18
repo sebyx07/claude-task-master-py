@@ -269,6 +269,92 @@ class TestStatusFunction:
         calls = [str(call) for call in mock_console.print.call_args_list]
         assert any("Task Status" in str(call) for call in calls)
 
+    def test_status_shows_tools_planning(
+        self,
+        info_state_dir: Path,
+        info_goal_file: Path,
+        mock_console,
+    ):
+        """Test status shows correct tools for planning phase."""
+        from datetime import datetime
+
+        timestamp = datetime.now().isoformat()
+        state_data = {
+            "status": "planning",
+            "current_task_index": 0,
+            "session_count": 1,
+            "current_pr": None,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+            "run_id": "test-run",
+            "model": "sonnet",
+            "options": {
+                "auto_merge": False,
+                "max_sessions": 10,
+                "pause_on_pr": False,
+                "log_level": "normal",
+                "log_format": "text",
+            },
+        }
+        state_file = info_state_dir / "state.json"
+        state_file.write_text(json.dumps(state_data))
+
+        with patch.object(StateManager, "STATE_DIR", info_state_dir):
+            info.status()
+
+        calls = [str(call) for call in mock_console.print.call_args_list]
+        assert any("Read, Glob, Grep, Bash (read-only mode)" in str(call) for call in calls)
+
+    def test_status_shows_tools_working(
+        self,
+        info_state_dir: Path,
+        info_state_file: Path,
+        info_goal_file: Path,
+        mock_console,
+    ):
+        """Test status shows correct tools for working phase."""
+        with patch.object(StateManager, "STATE_DIR", info_state_dir):
+            info.status()
+
+        calls = [str(call) for call in mock_console.print.call_args_list]
+        assert any("All (bypassPermissions mode)" in str(call) for call in calls)
+
+    def test_status_shows_tools_blocked(
+        self,
+        info_state_dir: Path,
+        info_goal_file: Path,
+        mock_console,
+    ):
+        """Test status shows correct tools for blocked status."""
+        from datetime import datetime
+
+        timestamp = datetime.now().isoformat()
+        state_data = {
+            "status": "blocked",
+            "current_task_index": 2,
+            "session_count": 5,
+            "current_pr": None,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+            "run_id": "test-run",
+            "model": "sonnet",
+            "options": {
+                "auto_merge": False,
+                "max_sessions": 10,
+                "pause_on_pr": False,
+                "log_level": "normal",
+                "log_format": "text",
+            },
+        }
+        state_file = info_state_dir / "state.json"
+        state_file.write_text(json.dumps(state_data))
+
+        with patch.object(StateManager, "STATE_DIR", info_state_dir):
+            info.status()
+
+        calls = [str(call) for call in mock_console.print.call_args_list]
+        assert any("All (bypassPermissions mode)" in str(call) for call in calls)
+
 
 # =============================================================================
 # Tests for plan()
