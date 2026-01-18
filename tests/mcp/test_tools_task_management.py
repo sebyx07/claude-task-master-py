@@ -161,3 +161,54 @@ class TestListTasksTool:
         completed_tasks = [t for t in result["tasks"] if t["completed"]]
         assert len(incomplete_tasks) == 3
         assert len(completed_tasks) == 1
+
+
+class TestStopTaskTool:
+    """Test the stop_task MCP tool."""
+
+    def test_stop_task_no_active_task(self, temp_dir):
+        """Test stop_task when no task exists."""
+        from claude_task_master.mcp.tools import stop_task
+
+        result = stop_task(temp_dir)
+        assert result["success"] is False
+        assert "No active task found" in result["message"]
+
+    def test_stop_task_success(self, initialized_state, state_dir):
+        """Test stop_task successfully stops a planning task."""
+        from claude_task_master.mcp.tools import stop_task
+
+        result = stop_task(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is True
+        assert result["previous_status"] == "planning"
+        assert result["new_status"] == "stopped"
+
+        # Verify state was updated
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        assert state.status == "stopped"
+
+    def test_stop_task_with_reason(self, initialized_state, state_dir):
+        """Test stop_task records reason in progress."""
+        from claude_task_master.mcp.tools import stop_task
+
+        result = stop_task(state_dir.parent, reason="User requested stop", state_dir=str(state_dir))
+        assert result["success"] is True
+        assert result["reason"] == "User requested stop"
+
+        # Verify reason was recorded in progress
+        state_manager = StateManager(state_dir=state_dir)
+        progress = state_manager.load_progress() or ""
+        assert "User requested stop" in progress
+
+    def test_stop_task_already_stopped(self, initialized_state, state_dir):
+        """Test stop_task fails if task is already stopped."""
+        from claude_task_master.mcp.tools import stop_task
+
+        # First stop it
+        stop_task(state_dir.parent, state_dir=str(state_dir))
+
+        # Try to stop again
+        result = stop_task(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is False
+        assert "stopped" in result["previous_status"]
