@@ -1,0 +1,156 @@
+# =============================================================================
+# Production with Nginx Reverse Proxy
+# =============================================================================
+# Production setup with Nginx for:
+# - SSL/TLS termination
+# - HTTP to HTTPS redirect
+# - Rate limiting
+# - Load balancing
+# - WebSocket/SSE support
+#
+# Prerequisites:
+#   - SSL certificates (Let's Encrypt or other)
+#   - Domain name configured
+#
+# Usage:
+#   1. Configure SSL certificates in .env:
+#      SSL_CERT_PATH=/etc/letsencrypt/live/claudetm.example.com/fullchain.pem
+#      SSL_KEY_PATH=/etc/letsencrypt/live/claudetm.example.com/privkey.pem
+#
+#   2. Start services:
+#      docker compose -f production-with-nginx.yml up -d
+#
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Claude Task Master Server
+  # ---------------------------------------------------------------------------
+  claudetm:
+    image: ghcr.io/developerz-ai/claude-task-master:latest
+    container_name: claudetm-app
+    restart: always
+
+    # Expose ports only to nginx (not to host)
+    expose:
+      - "8000"
+      - "8080"
+
+    volumes:
+      - "${CLAUDE_CREDENTIALS_PATH:-~/.claude}:/home/claudetm/.claude:ro"
+      - "${PROJECT_PATH:-.}:/app/project"
+      - "${HOME}/.gitconfig:/home/claudetm/.gitconfig:ro"
+      - "${HOME}/.config/gh:/home/claudetm/.config/gh:ro"
+
+    environment:
+      - CLAUDETM_PASSWORD=${CLAUDETM_PASSWORD:?Error: CLAUDETM_PASSWORD is required}
+      - CLAUDETM_SERVER_HOST=0.0.0.0
+      - CLAUDETM_REST_PORT=8000
+      - CLAUDETM_MCP_PORT=8080
+      - CLAUDETM_MCP_TRANSPORT=${CLAUDETM_MCP_TRANSPORT:-sse}
+      - CLAUDETM_LOG_LEVEL=${CLAUDETM_LOG_LEVEL:-info}
+      - CLAUDETM_WEBHOOK_URL=${CLAUDETM_WEBHOOK_URL:-}
+      - CLAUDETM_WEBHOOK_SECRET=${CLAUDETM_WEBHOOK_SECRET:-}
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    networks:
+      - claudetm-internal
+
+  # ---------------------------------------------------------------------------
+  # Nginx Reverse Proxy
+  # ---------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: claudetm-nginx
+    restart: always
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      # Nginx configuration
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+
+      # SSL certificates
+      - "${SSL_CERT_PATH}:/etc/nginx/ssl/cert.pem:ro"
+      - "${SSL_KEY_PATH}:/etc/nginx/ssl/key.pem:ro"
+
+      # Let's Encrypt ACME challenge (optional)
+      - ./nginx/acme-challenge:/var/www/acme-challenge:ro
+
+    depends_on:
+      claudetm:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    networks:
+      - claudetm-internal
+
+networks:
+  claudetm-internal:
+    driver: bridge
+
+# =============================================================================
+# Nginx Configuration Files
+# =============================================================================
+#
+# Create these files in ./nginx/ directory:
+#
+# 1. nginx/nginx.conf (main configuration)
+# 2. nginx/conf.d/claudetm.conf (site configuration)
+#
+# See nginx-config directory for examples or use the provided templates.
+#
+# =============================================================================
+# SSL Certificate Setup
+# =============================================================================
+#
+# Option 1: Let's Encrypt (Certbot)
+#   sudo certbot certonly --standalone -d claudetm.example.com
+#
+# Option 2: Self-signed (development only)
+#   openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+#     -keyout nginx/ssl/key.pem \
+#     -out nginx/ssl/cert.pem
+#
+# Then configure .env:
+#   SSL_CERT_PATH=/etc/letsencrypt/live/claudetm.example.com/fullchain.pem
+#   SSL_KEY_PATH=/etc/letsencrypt/live/claudetm.example.com/privkey.pem
+#
+# =============================================================================
+# Access URLs
+# =============================================================================
+#
+# REST API:  https://claudetm.example.com/api
+# API Docs:  https://claudetm.example.com/api/docs
+# MCP SSE:   https://claudetm.example.com/mcp/sse
+# Health:    https://claudetm.example.com/health
+#
+# =============================================================================

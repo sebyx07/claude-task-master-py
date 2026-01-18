@@ -1,0 +1,19 @@
+# Environment files (contain secrets)
+.env
+.env.*
+!.env.example
+
+# Generated nginx/caddy config (if users customize)
+nginx/ssl/
+caddy/data/
+caddy/config/
+
+# Docker volumes
+volumes/
+
+# Logs
+logs/
+*.log
+
+# Monitoring data
+monitoring/data/

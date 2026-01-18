@@ -656,9 +656,44 @@ CLAUDE_CREDENTIALS_PATH=/custom/path/.claude
 docker compose up
 ```
 
-### Production docker-compose.yml
+### Production docker-compose.yml Examples
 
-Example production configuration with all features:
+The repository includes comprehensive production-ready docker-compose examples for various deployment scenarios. All examples are located in the `examples/docker-compose/` directory.
+
+**Available Examples:**
+
+1. **[basic-production.yml](../examples/docker-compose/basic-production.yml)** - Simple production setup with essential features
+2. **[production-with-nginx.yml](../examples/docker-compose/production-with-nginx.yml)** - Production with Nginx reverse proxy and SSL
+3. **[production-with-caddy.yml](../examples/docker-compose/production-with-caddy.yml)** - Production with Caddy (automatic SSL)
+4. **[production-monitoring.yml](../examples/docker-compose/production-monitoring.yml)** - Production with Prometheus and Grafana
+5. **[development.yml](../examples/docker-compose/development.yml)** - Development environment
+
+See the **[Docker Compose Examples README](../examples/docker-compose/README.md)** for detailed documentation, usage instructions, and configuration guides for each example.
+
+**Quick Start with Production Examples:**
+
+```bash
+# Navigate to examples directory
+cd examples/docker-compose
+
+# Copy the example you want to use
+cp basic-production.yml docker-compose.yml
+
+# Create .env file from template
+cp .env.example .env
+# Edit .env and set CLAUDETM_PASSWORD and other variables
+
+# Start services
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop services
+docker compose down
+```
+
+**Basic Production Example:**
 
 ```yaml
 services:
@@ -712,6 +747,8 @@ networks:
   default:
     name: claudetm-network
 ```
+
+For more advanced production setups including SSL/TLS, monitoring, and high availability, see the [examples directory](../examples/docker-compose/).
 
 ## Production Deployment
 

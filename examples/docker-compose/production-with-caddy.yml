@@ -1,0 +1,165 @@
+# =============================================================================
+# Production with Caddy Reverse Proxy
+# =============================================================================
+# Production setup with Caddy for:
+# - Automatic SSL certificates (Let's Encrypt)
+# - Automatic HTTP to HTTPS redirect
+# - Simpler configuration than Nginx
+# - Built-in security headers
+#
+# Prerequisites:
+#   - Domain name pointing to your server
+#   - Ports 80 and 443 accessible
+#
+# Usage:
+#   1. Set your domain in .env:
+#      DOMAIN=claudetm.example.com
+#
+#   2. Start services:
+#      docker compose -f production-with-caddy.yml up -d
+#
+#   Caddy will automatically obtain and renew SSL certificates!
+#
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Claude Task Master Server
+  # ---------------------------------------------------------------------------
+  claudetm:
+    image: ghcr.io/developerz-ai/claude-task-master:latest
+    container_name: claudetm-app
+    restart: always
+
+    # Expose ports only to caddy (not to host)
+    expose:
+      - "8000"
+      - "8080"
+
+    volumes:
+      - "${CLAUDE_CREDENTIALS_PATH:-~/.claude}:/home/claudetm/.claude:ro"
+      - "${PROJECT_PATH:-.}:/app/project"
+      - "${HOME}/.gitconfig:/home/claudetm/.gitconfig:ro"
+      - "${HOME}/.config/gh:/home/claudetm/.config/gh:ro"
+
+    environment:
+      - CLAUDETM_PASSWORD=${CLAUDETM_PASSWORD:?Error: CLAUDETM_PASSWORD is required}
+      - CLAUDETM_SERVER_HOST=0.0.0.0
+      - CLAUDETM_REST_PORT=8000
+      - CLAUDETM_MCP_PORT=8080
+      - CLAUDETM_MCP_TRANSPORT=${CLAUDETM_MCP_TRANSPORT:-sse}
+      - CLAUDETM_LOG_LEVEL=${CLAUDETM_LOG_LEVEL:-info}
+      - CLAUDETM_WEBHOOK_URL=${CLAUDETM_WEBHOOK_URL:-}
+      - CLAUDETM_WEBHOOK_SECRET=${CLAUDETM_WEBHOOK_SECRET:-}
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    networks:
+      - claudetm-internal
+
+  # ---------------------------------------------------------------------------
+  # Caddy Reverse Proxy
+  # ---------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: claudetm-caddy
+    restart: always
+
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+
+    volumes:
+      # Caddy configuration
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+
+      # Caddy data (for SSL certificates)
+      - caddy_data:/data
+      - caddy_config:/config
+
+    environment:
+      - DOMAIN=${DOMAIN:?Error: DOMAIN is required}
+      - CLAUDETM_UPSTREAM=claudetm:8000
+      - MCP_UPSTREAM=claudetm:8080
+
+    depends_on:
+      claudetm:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    networks:
+      - claudetm-internal
+
+volumes:
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+
+networks:
+  claudetm-internal:
+    driver: bridge
+
+# =============================================================================
+# Caddyfile Configuration
+# =============================================================================
+#
+# Create ./caddy/Caddyfile with your domain configuration.
+# See caddy-config/Caddyfile for an example.
+#
+# Caddy will automatically:
+# - Obtain SSL certificates from Let's Encrypt
+# - Renew certificates before expiry
+# - Redirect HTTP to HTTPS
+# - Enable HTTP/2 and HTTP/3
+#
+# =============================================================================
+# Access URLs
+# =============================================================================
+#
+# After DNS is configured and Caddy obtains certificates:
+#
+# REST API:  https://claudetm.example.com/api
+# API Docs:  https://claudetm.example.com/api/docs
+# MCP SSE:   https://claudetm.example.com/mcp/sse
+# Health:    https://claudetm.example.com/health
+#
+# =============================================================================
+# Environment Variables
+# =============================================================================
+#
+# Required:
+#   DOMAIN=claudetm.example.com
+#   CLAUDETM_PASSWORD=your-secure-password
+#
+# Optional:
+#   PROJECT_PATH=/path/to/project
+#   CLAUDE_CREDENTIALS_PATH=~/.claude
+#   CLAUDETM_LOG_LEVEL=info
+#
+# =============================================================================

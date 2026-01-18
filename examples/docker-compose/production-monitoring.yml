@@ -1,0 +1,193 @@
+# =============================================================================
+# Production with Monitoring Stack
+# =============================================================================
+# Production setup with observability:
+# - Prometheus for metrics collection
+# - Grafana for visualization
+# - Node Exporter for system metrics
+# - Pre-configured dashboards
+#
+# Usage:
+#   docker compose -f production-monitoring.yml up -d
+#
+# Access:
+#   Claude Task Master: http://localhost:8000
+#   Grafana: http://localhost:3000 (admin/admin)
+#   Prometheus: http://localhost:9090
+#
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # ---------------------------------------------------------------------------
+  # Claude Task Master Server
+  # ---------------------------------------------------------------------------
+  claudetm:
+    image: ghcr.io/developerz-ai/claude-task-master:latest
+    container_name: claudetm-app
+    restart: always
+
+    ports:
+      - "${CLAUDETM_REST_PORT:-8000}:8000"
+      - "${CLAUDETM_MCP_PORT:-8080}:8080"
+
+    volumes:
+      - "${CLAUDE_CREDENTIALS_PATH:-~/.claude}:/home/claudetm/.claude:ro"
+      - "${PROJECT_PATH:-.}:/app/project"
+      - "${HOME}/.gitconfig:/home/claudetm/.gitconfig:ro"
+      - "${HOME}/.config/gh:/home/claudetm/.config/gh:ro"
+
+    environment:
+      - CLAUDETM_PASSWORD=${CLAUDETM_PASSWORD:?Error: CLAUDETM_PASSWORD is required}
+      - CLAUDETM_SERVER_HOST=0.0.0.0
+      - CLAUDETM_REST_PORT=8000
+      - CLAUDETM_MCP_PORT=8080
+      - CLAUDETM_LOG_LEVEL=${CLAUDETM_LOG_LEVEL:-info}
+      - CLAUDETM_WEBHOOK_URL=${CLAUDETM_WEBHOOK_URL:-}
+      - CLAUDETM_WEBHOOK_SECRET=${CLAUDETM_WEBHOOK_SECRET:-}
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    networks:
+      - claudetm-monitoring
+
+    labels:
+      - "prometheus.scrape=true"
+      - "prometheus.port=8000"
+      - "prometheus.path=/metrics"
+
+  # ---------------------------------------------------------------------------
+  # Prometheus - Metrics Collection
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: claudetm-prometheus
+    restart: always
+
+    ports:
+      - "9090:9090"
+
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+
+    networks:
+      - claudetm-monitoring
+
+    depends_on:
+      - claudetm
+
+  # ---------------------------------------------------------------------------
+  # Grafana - Visualization
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: claudetm-grafana
+    restart: always
+
+    ports:
+      - "3000:3000"
+
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=
+      - GF_USERS_ALLOW_SIGN_UP=false
+
+    networks:
+      - claudetm-monitoring
+
+    depends_on:
+      - prometheus
+
+  # ---------------------------------------------------------------------------
+  # Node Exporter - System Metrics
+  # ---------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: claudetm-node-exporter
+    restart: always
+
+    ports:
+      - "9100:9100"
+
+    command:
+      - '--path.rootfs=/host'
+
+    volumes:
+      - /:/host:ro,rslave
+
+    networks:
+      - claudetm-monitoring
+
+volumes:
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  claudetm-monitoring:
+    driver: bridge
+
+# =============================================================================
+# Monitoring Configuration Files
+# =============================================================================
+#
+# Create these files in ./monitoring/ directory:
+#
+# 1. monitoring/prometheus/prometheus.yml - Prometheus config
+# 2. monitoring/prometheus/alerts.yml - Alert rules
+# 3. monitoring/grafana/provisioning/datasources/prometheus.yml - Grafana datasource
+# 4. monitoring/grafana/provisioning/dashboards/dashboard.yml - Dashboard config
+# 5. monitoring/grafana/dashboards/claudetm.json - Claude Task Master dashboard
+#
+# See monitoring-config directory for examples.
+#
+# =============================================================================
+# Usage
+# =============================================================================
+#
+# Start all services:
+#   docker compose -f production-monitoring.yml up -d
+#
+# View logs:
+#   docker compose -f production-monitoring.yml logs -f claudetm
+#
+# Access Grafana:
+#   open http://localhost:3000
+#   Login: admin/admin (change on first login)
+#
+# Access Prometheus:
+#   open http://localhost:9090
+#
+# Stop services:
+#   docker compose -f production-monitoring.yml down
+#
+# =============================================================================

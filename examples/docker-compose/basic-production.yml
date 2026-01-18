@@ -1,0 +1,102 @@
+# =============================================================================
+# Basic Production Docker Compose Configuration
+# =============================================================================
+# Simple production setup with essential features:
+# - Password authentication (REQUIRED)
+# - Health checks
+# - Log rotation
+# - Proper volume mounts
+# - Restart policy
+#
+# Usage:
+#   CLAUDETM_PASSWORD=your-password docker compose -f basic-production.yml up -d
+#
+# =============================================================================
+
+version: "3.8"
+
+services:
+  claudetm:
+    image: ghcr.io/developerz-ai/claude-task-master:latest
+    container_name: claudetm-production
+    restart: always
+
+    ports:
+      - "${CLAUDETM_REST_PORT:-8000}:8000"
+      - "${CLAUDETM_MCP_PORT:-8080}:8080"
+
+    volumes:
+      # Claude credentials - REQUIRED
+      - "${CLAUDE_CREDENTIALS_PATH:-~/.claude}:/home/claudetm/.claude:ro"
+
+      # Project directory
+      - "${PROJECT_PATH:-.}:/app/project"
+
+      # Git configuration
+      - "${HOME}/.gitconfig:/home/claudetm/.gitconfig:ro"
+
+      # GitHub CLI configuration
+      - "${HOME}/.config/gh:/home/claudetm/.config/gh:ro"
+
+    environment:
+      # Authentication - REQUIRED for production
+      - CLAUDETM_PASSWORD=${CLAUDETM_PASSWORD:?Error: CLAUDETM_PASSWORD is required}
+
+      # Server configuration
+      - CLAUDETM_SERVER_HOST=0.0.0.0
+      - CLAUDETM_REST_PORT=8000
+      - CLAUDETM_MCP_PORT=8080
+      - CLAUDETM_MCP_TRANSPORT=${CLAUDETM_MCP_TRANSPORT:-sse}
+      - CLAUDETM_LOG_LEVEL=${CLAUDETM_LOG_LEVEL:-info}
+
+      # CORS configuration
+      - CLAUDETM_CORS_ORIGINS=${CLAUDETM_CORS_ORIGINS:-}
+
+      # Webhooks (optional)
+      - CLAUDETM_WEBHOOK_URL=${CLAUDETM_WEBHOOK_URL:-}
+      - CLAUDETM_WEBHOOK_SECRET=${CLAUDETM_WEBHOOK_SECRET:-}
+
+      # Task configuration
+      - CLAUDETM_TARGET_BRANCH=${CLAUDETM_TARGET_BRANCH:-main}
+      - CLAUDETM_AUTO_MERGE=${CLAUDETM_AUTO_MERGE:-true}
+      - CLAUDETM_MAX_SESSIONS=${CLAUDETM_MAX_SESSIONS:-}
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
+    name: claudetm-production
+
+# =============================================================================
+# Configuration Notes
+# =============================================================================
+#
+# Environment Variables (.env file or export):
+#   CLAUDETM_PASSWORD=your-secure-password          # REQUIRED
+#   PROJECT_PATH=/path/to/project                   # Optional
+#   CLAUDE_CREDENTIALS_PATH=~/.claude               # Optional
+#   CLAUDETM_LOG_LEVEL=info                         # Optional
+#   CLAUDETM_WEBHOOK_URL=https://webhook.example.com # Optional
+#   CLAUDETM_WEBHOOK_SECRET=secret                  # Optional
+#
+# Startup:
+#   docker compose -f basic-production.yml up -d
+#
+# View logs:
+#   docker compose -f basic-production.yml logs -f
+#
+# Stop:
+#   docker compose -f basic-production.yml down
+#
+# =============================================================================

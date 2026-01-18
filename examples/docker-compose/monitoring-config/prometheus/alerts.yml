@@ -1,0 +1,110 @@
+# =============================================================================
+# Prometheus Alert Rules for Claude Task Master
+# =============================================================================
+
+groups:
+  - name: claudetm_alerts
+    interval: 30s
+    rules:
+      # Service availability
+      - alert: ClaudeTaskMasterDown
+        expr: up{job="claudetm"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Claude Task Master is down"
+          description: "Claude Task Master has been down for more than 1 minute."
+
+      # Health check failures
+      - alert: HealthCheckFailing
+        expr: claudetm_health_status != 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Health check failing"
+          description: "Claude Task Master health check has been failing for 2 minutes."
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: rate(claudetm_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is above 5% for the last 5 minutes."
+
+      # Task execution failures
+      - alert: TaskExecutionFailures
+        expr: rate(claudetm_task_failures_total[10m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High task failure rate"
+          description: "Task failure rate is above 10% for the last 10 minutes."
+
+      # Long-running tasks
+      - alert: LongRunningTask
+        expr: claudetm_task_duration_seconds > 3600
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "Long-running task detected"
+          description: "Task has been running for more than 1 hour."
+
+      # Memory usage
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes{name="claudetm"} / container_spec_memory_limit_bytes{name="claudetm"}) > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is above 90% for 5 minutes."
+
+      # CPU usage
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total{name="claudetm"}[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is above 80% for 10 minutes."
+
+      # Disk space
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/app/project"} / node_filesystem_size_bytes{mountpoint="/app/project"}) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Less than 10% disk space remaining on project volume."
+
+  - name: system_alerts
+    interval: 30s
+    rules:
+      # Node exporter down
+      - alert: NodeExporterDown
+        expr: up{job="node-exporter"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node Exporter is down"
+          description: "Cannot collect system metrics."
+
+      # High system load
+      - alert: HighSystemLoad
+        expr: node_load15 > 4
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High system load"
+          description: "System load is above 4 for 5 minutes."

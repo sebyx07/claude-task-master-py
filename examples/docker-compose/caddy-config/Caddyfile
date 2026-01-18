@@ -1,0 +1,137 @@
+# =============================================================================
+# Caddyfile for Claude Task Master
+# =============================================================================
+# This Caddyfile configures Caddy as a reverse proxy for Claude Task Master
+# with automatic SSL certificates from Let's Encrypt.
+#
+# Environment variables (from docker-compose):
+#   {$DOMAIN} - Your domain name (e.g., claudetm.example.com)
+#   {$CLAUDETM_UPSTREAM} - Claude Task Master REST API (claudetm:8000)
+#   {$MCP_UPSTREAM} - MCP server (claudetm:8080)
+# =============================================================================
+
+# Main site configuration
+{$DOMAIN} {
+    # Automatic HTTPS with Let's Encrypt
+    # Caddy will automatically obtain and renew certificates
+
+    # Enable gzip compression
+    encode gzip zstd
+
+    # Security headers
+    header {
+        # Enable HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+        # Prevent MIME sniffing
+        X-Content-Type-Options "nosniff"
+        # XSS protection
+        X-XSS-Protection "1; mode=block"
+        # Remove server header
+        -Server
+    }
+
+    # Health check endpoint (no rate limiting)
+    handle /health {
+        reverse_proxy {$CLAUDETM_UPSTREAM} {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # REST API endpoints
+    handle /api/* {
+        reverse_proxy {$CLAUDETM_UPSTREAM} {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+
+            # Timeouts for long-running tasks
+            transport http {
+                read_timeout 5m
+                write_timeout 5m
+            }
+        }
+    }
+
+    # MCP Server - SSE endpoint
+    handle /mcp/sse {
+        reverse_proxy {$MCP_UPSTREAM} {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+
+            # SSE requires no buffering and long timeout
+            transport http {
+                read_timeout 24h
+                write_timeout 24h
+            }
+
+            # Disable buffering for SSE
+            flush_interval -1
+        }
+    }
+
+    # MCP Server - Streamable HTTP endpoint
+    handle /mcp/streamable-http {
+        reverse_proxy {$MCP_UPSTREAM} {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+
+            transport http {
+                read_timeout 5m
+                write_timeout 5m
+            }
+        }
+    }
+
+    # Root redirect to API docs
+    handle / {
+        redir /api/docs 302
+    }
+
+    # Logging
+    log {
+        output file /var/log/caddy/access.log {
+            roll_size 10mb
+            roll_keep 10
+        }
+        format json
+    }
+}
+
+# =============================================================================
+# Advanced Configuration Examples
+# =============================================================================
+
+# Rate limiting (requires Caddy rate-limit plugin)
+# Uncomment if you have the plugin installed:
+#
+# {$DOMAIN} {
+#     rate_limit {
+#         zone api {
+#             key {remote_host}
+#             events 100
+#             window 1m
+#         }
+#     }
+#     # ... rest of config
+# }
+
+# =============================================================================
+# Local Development with Self-Signed Certificate
+# =============================================================================
+# For local development, use localhost or local.example.com:
+#
+# localhost {
+#     tls internal  # Self-signed certificate
+#     reverse_proxy claudetm:8000
+# }
+# =============================================================================
