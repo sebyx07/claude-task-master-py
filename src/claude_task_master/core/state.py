@@ -86,7 +86,7 @@ class TaskOptions(BaseModel):
 
 
 # Status type alias for type checking
-StatusType = Literal["planning", "working", "blocked", "paused", "success", "failed"]
+StatusType = Literal["planning", "working", "blocked", "paused", "stopped", "success", "failed"]
 
 
 # Workflow stage type alias
@@ -105,7 +105,7 @@ WorkflowStageType = Literal[
 class TaskState(BaseModel):
     """Machine-readable state."""
 
-    status: StatusType  # planning|working|blocked|paused|success|failed
+    status: StatusType  # planning|working|blocked|paused|stopped|success|failed
     workflow_stage: WorkflowStageType | None = None  # PR lifecycle stage
     current_task_index: int = 0
     session_count: int = 0
