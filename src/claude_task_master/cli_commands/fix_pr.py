@@ -288,7 +288,7 @@ def fix_pr(
         # Initialize agent
         agent = AgentWrapper(
             access_token=access_token,
-            model_type=ModelType.OPUS,
+            model=ModelType.OPUS,
             working_dir=str(working_dir),
         )
 
