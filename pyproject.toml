@@ -72,6 +72,8 @@ claudetm-py = "claude_task_master.cli:app"
 claudetm-mcp = "claude_task_master.mcp.server:main"
 # REST API server entry point
 claudetm-api = "claude_task_master.api.server:main"
+# Unified server entry point (REST API + MCP together)
+claudetm-server = "claude_task_master.server:main"
 
 # Setuptools configuration
 [tool.setuptools.packages.find]
