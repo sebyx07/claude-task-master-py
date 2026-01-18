@@ -13,10 +13,10 @@ Autonomous task orchestration system that uses Claude Agent SDK to keep Claude w
 ### Global Install (Recommended for usage)
 ```bash
 # Install globally via uv tools
-uv tool install /path/to/claude-task-master-py
+uv tool install /path/to/claude-task-master
 
 # Or reinstall after changes
-uv tool install --force --reinstall /path/to/claude-task-master-py
+uv tool install --force --reinstall /path/to/claude-task-master
 
 # Verify installation
 claudetm doctor

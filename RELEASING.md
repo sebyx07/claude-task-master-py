@@ -227,7 +227,7 @@ This project uses PyPI's trusted publishing (no manual tokens needed).
    - Go to project settings
    - Add trusted publisher:
      - Owner: `sebyx07`
-     - Repository: `claude-task-master-py`
+     - Repository: `claude-task-master`
      - Workflow: `release.yml`
      - Environment: `release`
 

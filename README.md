@@ -106,7 +106,7 @@ claudetm doctor
 ```bash
 # Clone the repository
 git clone https://github.com/developerz-ai/claude-task-master
-cd claude-task-master-py
+cd claude-task-master
 
 # Install with development dependencies
 pip install -e ".[dev]"
