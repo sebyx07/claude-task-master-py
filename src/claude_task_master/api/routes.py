@@ -10,36 +10,62 @@ Endpoints:
 - GET /progress: Get progress summary
 - GET /context: Get accumulated context/learnings
 - GET /health: Health check endpoint
+- POST /task/init: Initialize a new task
+- DELETE /task: Delete/cleanup current task
+- POST /control/stop: Stop a running task with optional cleanup
+- POST /control/resume: Resume a paused or blocked task
+- PATCH /config: Update runtime configuration options
 
 Usage:
-    from claude_task_master.api.routes import create_info_router
+    from claude_task_master.api.routes import (
+        create_info_router,
+        create_control_router,
+        create_task_router,
+    )
 
     router = create_info_router()
     app.include_router(router)
+
+    control_router = create_control_router()
+    app.include_router(control_router)
+
+    task_router = create_task_router()
+    app.include_router(task_router)
 """
 
 from __future__ import annotations
 
 import logging
+import shutil
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from claude_task_master import __version__
 from claude_task_master.api.models import (
+    ConfigUpdateRequest,
     ContextResponse,
+    ControlResponse,
     ErrorResponse,
     HealthResponse,
     LogsResponse,
     PlanResponse,
     ProgressResponse,
+    ResumeRequest,
+    StopRequest,
+    TaskDeleteResponse,
+    TaskInitRequest,
+    TaskInitResponse,
     TaskOptionsResponse,
     TaskProgressInfo,
     TaskStatus,
     TaskStatusResponse,
     WorkflowStage,
 )
-from claude_task_master.core.state import StateManager
+from claude_task_master.core.agent import ModelType
+from claude_task_master.core.control import ControlManager
+from claude_task_master.core.credentials import CredentialManager
+from claude_task_master.core.state import StateManager, TaskOptions
 
 if TYPE_CHECKING:
     from fastapi import APIRouter, FastAPI, Query, Request
@@ -539,6 +565,498 @@ def create_info_router() -> APIRouter:
 
 
 # =============================================================================
+# Control Router (Stop)
+# =============================================================================
+
+
+def create_control_router() -> APIRouter:
+    """Create router for control endpoints.
+
+    These endpoints allow runtime control of task execution including
+    stopping and resuming tasks.
+
+    Returns:
+        APIRouter configured with control endpoints.
+
+    Raises:
+        ImportError: If FastAPI is not installed.
+    """
+    if not FASTAPI_AVAILABLE:
+        raise ImportError(
+            "FastAPI not installed. Install with: pip install claude-task-master[api]"
+        )
+
+    router = APIRouter(tags=["Control"])
+
+    @router.post(
+        "/control/stop",
+        response_model=ControlResponse,
+        responses={
+            400: {"model": ErrorResponse, "description": "Invalid operation for current state"},
+            404: {"model": ErrorResponse, "description": "No active task found"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+        summary="Stop Task",
+        description="Stop a running task with optional cleanup of state files.",
+    )
+    async def stop_task(
+        request: Request, stop_request: StopRequest
+    ) -> ControlResponse | JSONResponse:
+        """Stop a running task.
+
+        Stops the current task and optionally cleans up state files.
+        The task must be in a stoppable state (planning, working, blocked, or paused).
+
+        Args:
+            stop_request: Stop request with optional reason and cleanup flag.
+
+        Returns:
+            ControlResponse with operation result.
+
+        Raises:
+            404: If no active task exists.
+            400: If the task cannot be stopped in its current state.
+            500: If an error occurs during the operation.
+        """
+        state_manager = _get_state_manager(request)
+
+        if not state_manager.exists():
+            return JSONResponse(
+                status_code=404,
+                content=ErrorResponse(
+                    error="not_found",
+                    message="No active task found",
+                    suggestion="Start a new task with 'claudetm start <goal>'",
+                ).model_dump(),
+            )
+
+        try:
+            # Create control manager and perform stop operation
+            control = ControlManager(state_manager=state_manager)
+            result = control.stop(reason=stop_request.reason, cleanup=stop_request.cleanup)
+
+            return ControlResponse(
+                success=result.success,
+                message=result.message,
+                operation=result.operation,
+                previous_status=result.previous_status,
+                new_status=result.new_status,
+                details=result.details,
+            )
+
+        except Exception as e:
+            logger.exception("Error stopping task")
+
+            # Check if it's a known control error
+            if "Cannot stop task" in str(e):
+                return JSONResponse(
+                    status_code=400,
+                    content=ErrorResponse(
+                        error="invalid_operation",
+                        message=str(e),
+                        suggestion="Task may be in a terminal state or already stopped",
+                    ).model_dump(),
+                )
+
+            return JSONResponse(
+                status_code=500,
+                content=ErrorResponse(
+                    error="internal_error",
+                    message="Failed to stop task",
+                    detail=str(e),
+                ).model_dump(),
+            )
+
+    @router.post(
+        "/control/resume",
+        response_model=ControlResponse,
+        responses={
+            400: {"model": ErrorResponse, "description": "Invalid operation for current state"},
+            404: {"model": ErrorResponse, "description": "No active task found"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+        summary="Resume Task",
+        description="Resume a paused or blocked task.",
+    )
+    async def resume_task(
+        request: Request, resume_request: ResumeRequest
+    ) -> ControlResponse | JSONResponse:
+        """Resume a paused or blocked task.
+
+        Resumes the current task from paused or blocked status.
+        The task must be in a resumable state (paused, stopped, blocked, or working).
+
+        Returns:
+            ControlResponse with operation result.
+
+        Raises:
+            404: If no active task exists.
+            400: If the task cannot be resumed in its current state.
+            500: If an error occurs during the operation.
+        """
+        state_manager = _get_state_manager(request)
+
+        if not state_manager.exists():
+            return JSONResponse(
+                status_code=404,
+                content=ErrorResponse(
+                    error="not_found",
+                    message="No active task found",
+                    suggestion="Start a new task with 'claudetm start <goal>'",
+                ).model_dump(),
+            )
+
+        try:
+            # Create control manager and perform resume operation
+            control = ControlManager(state_manager=state_manager)
+            result = control.resume()
+
+            return ControlResponse(
+                success=result.success,
+                message=result.message,
+                operation=result.operation,
+                previous_status=result.previous_status,
+                new_status=result.new_status,
+                details=result.details,
+            )
+
+        except Exception as e:
+            logger.exception("Error resuming task")
+
+            # Check if it's a known control error
+            if "Cannot resume task" in str(e):
+                return JSONResponse(
+                    status_code=400,
+                    content=ErrorResponse(
+                        error="invalid_operation",
+                        message=str(e),
+                        suggestion="Task may be in a terminal state or already running",
+                    ).model_dump(),
+                )
+
+            return JSONResponse(
+                status_code=500,
+                content=ErrorResponse(
+                    error="internal_error",
+                    message="Failed to resume task",
+                    detail=str(e),
+                ).model_dump(),
+            )
+
+    @router.patch(
+        "/config",
+        response_model=ControlResponse,
+        responses={
+            400: {
+                "model": ErrorResponse,
+                "description": "Invalid configuration or no updates provided",
+            },
+            404: {"model": ErrorResponse, "description": "No active task found"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+        summary="Update Configuration",
+        description="Update runtime task configuration options.",
+    )
+    async def update_config(
+        request: Request, config_update: ConfigUpdateRequest
+    ) -> ControlResponse | JSONResponse:
+        """Update task configuration at runtime.
+
+        Updates the specified configuration options for the current task.
+        Only the fields specified in the request are updated; all other
+        configuration options retain their current values.
+
+        Supported options:
+        - auto_merge: Whether to auto-merge PRs when approved
+        - max_sessions: Maximum number of work sessions before pausing
+        - pause_on_pr: Whether to pause after creating PR for manual review
+        - enable_checkpointing: Whether to enable state checkpointing
+        - log_level: Log level (quiet, normal, verbose)
+        - log_format: Log format (text, json)
+        - pr_per_task: Whether to create PR per task vs per group
+
+        Args:
+            config_update: Configuration update request with fields to update.
+
+        Returns:
+            ControlResponse with operation result including updated values.
+
+        Raises:
+            404: If no active task exists.
+            400: If no configuration updates were provided or invalid values.
+            500: If an error occurs during the operation.
+        """
+        state_manager = _get_state_manager(request)
+
+        if not state_manager.exists():
+            return JSONResponse(
+                status_code=404,
+                content=ErrorResponse(
+                    error="not_found",
+                    message="No active task found",
+                    suggestion="Start a new task with 'claudetm start <goal>'",
+                ).model_dump(),
+            )
+
+        # Validate that at least one field is being updated
+        if not config_update.has_updates():
+            return JSONResponse(
+                status_code=400,
+                content=ErrorResponse(
+                    error="invalid_request",
+                    message="No configuration updates provided",
+                    suggestion="Specify at least one configuration field to update",
+                ).model_dump(),
+            )
+
+        try:
+            # Create control manager and perform config update
+            control = ControlManager(state_manager=state_manager)
+
+            # Convert config update to kwargs dictionary
+            update_kwargs = config_update.to_update_dict()
+            result = control.update_config(**update_kwargs)
+
+            return ControlResponse(
+                success=result.success,
+                message=result.message,
+                operation=result.operation,
+                previous_status=result.previous_status,
+                new_status=result.new_status,
+                details=result.details,
+            )
+
+        except ValueError as e:
+            logger.exception("Invalid configuration update")
+            return JSONResponse(
+                status_code=400,
+                content=ErrorResponse(
+                    error="invalid_configuration",
+                    message="Invalid configuration option",
+                    detail=str(e),
+                ).model_dump(),
+            )
+
+        except Exception as e:
+            logger.exception("Error updating configuration")
+            return JSONResponse(
+                status_code=500,
+                content=ErrorResponse(
+                    error="internal_error",
+                    message="Failed to update configuration",
+                    detail=str(e),
+                ).model_dump(),
+            )
+
+    return router
+
+
+# =============================================================================
+# Task Management Router (Init, Delete)
+# =============================================================================
+
+
+def create_task_router() -> APIRouter:
+    """Create router for task management endpoints.
+
+    These endpoints allow task lifecycle management including
+    initializing new tasks and deleting existing tasks.
+
+    Returns:
+        APIRouter configured with task management endpoints.
+
+    Raises:
+        ImportError: If FastAPI is not installed.
+    """
+    if not FASTAPI_AVAILABLE:
+        raise ImportError(
+            "FastAPI not installed. Install with: pip install claude-task-master[api]"
+        )
+
+    router = APIRouter(tags=["Task Management"])
+
+    @router.post(
+        "/task/init",
+        response_model=TaskInitResponse,
+        responses={
+            400: {"model": ErrorResponse, "description": "Invalid request or task already exists"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+        summary="Initialize Task",
+        description="Initialize a new task with the given goal and options.",
+    )
+    async def init_task(
+        request: Request, task_init: TaskInitRequest
+    ) -> TaskInitResponse | JSONResponse:
+        """Initialize a new task.
+
+        Creates a new task with the specified goal and configuration options.
+        The task will be in 'planning' status after initialization.
+
+        Args:
+            task_init: Task initialization request with goal and options.
+
+        Returns:
+            TaskInitResponse with initialization result including run_id.
+
+        Raises:
+            400: If a task already exists or request is invalid.
+            500: If an error occurs during initialization.
+        """
+        state_manager = _get_state_manager(request)
+
+        # Check if task already exists
+        if state_manager.exists():
+            return JSONResponse(
+                status_code=400,
+                content=ErrorResponse(
+                    error="task_exists",
+                    message="A task already exists",
+                    suggestion="Use DELETE /task to remove the existing task first",
+                ).model_dump(),
+            )
+
+        try:
+            # Validate model type
+            try:
+                ModelType(task_init.model)
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content=ErrorResponse(
+                        error="invalid_model",
+                        message=f"Invalid model '{task_init.model}'",
+                        detail="Model must be one of: opus, sonnet, haiku",
+                        suggestion="Use 'opus', 'sonnet', or 'haiku'",
+                    ).model_dump(),
+                )
+
+            # Load credentials to verify we can authenticate
+            try:
+                cred_manager = CredentialManager()
+                cred_manager.get_valid_token()
+            except Exception as e:
+                logger.exception("Failed to load credentials")
+                return JSONResponse(
+                    status_code=500,
+                    content=ErrorResponse(
+                        error="credentials_error",
+                        message="Failed to load Claude credentials",
+                        detail=str(e),
+                        suggestion="Ensure you have authenticated with 'claude auth'",
+                    ).model_dump(),
+                )
+
+            # Initialize task state
+            logger.info(f"Initializing new task: {task_init.goal}")
+            options = TaskOptions(
+                auto_merge=task_init.auto_merge,
+                max_sessions=task_init.max_sessions,
+                pause_on_pr=task_init.pause_on_pr,
+                enable_checkpointing=False,  # Default to False
+                log_level="normal",  # Default to normal
+                log_format="text",  # Default to text
+                pr_per_task=False,  # Default to False
+            )
+            state = state_manager.initialize(
+                goal=task_init.goal, model=task_init.model, options=options
+            )
+
+            logger.info(f"Task initialized with run_id: {state.run_id}")
+
+            return TaskInitResponse(
+                success=True,
+                message="Task initialized successfully",
+                run_id=state.run_id,
+                status=state.status,
+            )
+
+        except Exception as e:
+            logger.exception("Error initializing task")
+            return JSONResponse(
+                status_code=500,
+                content=ErrorResponse(
+                    error="internal_error",
+                    message="Failed to initialize task",
+                    detail=str(e),
+                ).model_dump(),
+            )
+
+    @router.delete(
+        "/task",
+        response_model=TaskDeleteResponse,
+        responses={
+            404: {"model": ErrorResponse, "description": "No active task found"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+        summary="Delete Task",
+        description="Delete the current task and cleanup all state files.",
+    )
+    async def delete_task(request: Request) -> TaskDeleteResponse | JSONResponse:
+        """Delete the current task.
+
+        Removes all task state files including plan, progress, context,
+        and state. This operation cannot be undone.
+
+        Returns:
+            TaskDeleteResponse with deletion result.
+
+        Raises:
+            404: If no active task exists.
+            500: If an error occurs during deletion.
+        """
+        state_manager = _get_state_manager(request)
+
+        if not state_manager.exists():
+            return JSONResponse(
+                status_code=404,
+                content=ErrorResponse(
+                    error="not_found",
+                    message="No active task found",
+                    suggestion="No task to delete",
+                ).model_dump(),
+            )
+
+        try:
+            # Check if session is active
+            is_active = state_manager.is_session_active()
+
+            if is_active:
+                logger.warning("Deleting task while session is active")
+                # Release session lock before deletion
+                state_manager.release_session_lock()
+
+            # Remove state directory
+            state_dir = state_manager.state_dir
+            if state_dir.exists():
+                shutil.rmtree(state_dir)
+                logger.info(f"Task state deleted: {state_dir}")
+                files_removed = True
+            else:
+                logger.warning(f"State directory not found: {state_dir}")
+                files_removed = False
+
+            return TaskDeleteResponse(
+                success=True,
+                message="Task deleted successfully",
+                files_removed=files_removed,
+            )
+
+        except Exception as e:
+            logger.exception("Error deleting task")
+            return JSONResponse(
+                status_code=500,
+                content=ErrorResponse(
+                    error="internal_error",
+                    message="Failed to delete task",
+                    detail=str(e),
+                ).model_dump(),
+            )
+
+    return router
+
+
+# =============================================================================
 # Router Registration
 # =============================================================================
 
@@ -556,4 +1074,14 @@ def register_routes(app: FastAPI) -> None:
     info_router = create_info_router()
     app.include_router(info_router)
 
+    # Create and register control router
+    control_router = create_control_router()
+    app.include_router(control_router)
+
+    # Create and register task management router
+    task_router = create_task_router()
+    app.include_router(task_router)
+
     logger.debug("Registered info routes: /status, /plan, /logs, /progress, /context, /health")
+    logger.debug("Registered control routes: /control/stop, /control/resume, /config")
+    logger.debug("Registered task routes: /task/init, /task")

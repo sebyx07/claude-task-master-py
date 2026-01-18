@@ -39,6 +39,17 @@ def api_state_dir(temp_dir: Path) -> Path:
 
 
 @pytest.fixture
+def api_empty_state_dir(temp_dir: Path) -> Path:
+    """Create an empty state directory path without creating it.
+
+    This is for tests that need to verify state doesn't exist before the test.
+    """
+    state_dir = temp_dir / ".claude-task-master"
+    # Don't create it - just return the path
+    return state_dir
+
+
+@pytest.fixture
 def api_logs_dir(api_state_dir: Path) -> Path:
     """Create a logs directory for API tests."""
     logs_dir = api_state_dir / "logs"
@@ -52,6 +63,22 @@ def api_app(temp_dir: Path, api_state_dir: Path):
 
     The app is configured with a temporary working directory and
     no CORS restrictions for testing.
+    """
+    from claude_task_master.api.server import create_app
+
+    return create_app(
+        working_dir=temp_dir,
+        cors_origins=["*"],
+        include_docs=True,
+    )
+
+
+@pytest.fixture
+def api_app_empty_state(temp_dir: Path, api_empty_state_dir: Path):
+    """Create a FastAPI app instance with an empty state directory.
+
+    The app is configured with a temporary working directory where
+    the state directory doesn't exist yet. Useful for testing task initialization.
     """
     from claude_task_master.api.server import create_app
 
@@ -78,6 +105,24 @@ def api_client(api_app):
         pytest.skip("FastAPI not installed")
 
     with TestClient(api_app) as client:
+        yield client
+
+
+@pytest.fixture
+def api_client_empty_state(api_app_empty_state):
+    """Create a FastAPI TestClient with an empty state directory.
+
+    This fixture provides a client for testing task initialization
+    where no prior state should exist.
+
+    Example:
+        def test_init_task(api_client_empty_state):
+            response = api_client_empty_state.post("/task/init", ...)
+    """
+    if TestClient is None:
+        pytest.skip("FastAPI not installed")
+
+    with TestClient(api_app_empty_state) as client:
         yield client
 
 
