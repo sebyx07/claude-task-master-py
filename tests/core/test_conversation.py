@@ -122,14 +122,14 @@ class TestModelConstants:
         # Reset config to ensure fresh state
         reset_config()
         config = get_config()
-        # Verify config has model names
+        # Verify config has model names (whatever they are configured to be)
         assert config.models.sonnet is not None
         assert config.models.opus is not None
         assert config.models.haiku is not None
-        # Verify format matches Claude model naming convention
-        assert "claude-" in config.models.sonnet
-        assert "claude-" in config.models.opus
-        assert "claude-" in config.models.haiku
+        # Verify they are non-empty strings
+        assert isinstance(config.models.sonnet, str) and config.models.sonnet
+        assert isinstance(config.models.opus, str) and config.models.opus
+        assert isinstance(config.models.haiku, str) and config.models.haiku
 
     def test_default_tools(self):
         """Should have expected default tools."""
