@@ -1,58 +1,80 @@
 #!/usr/bin/env bash
 # ============================================================================
-# claudetm - Claude Task Master Bash Wrapper
+# 🤖 claudetm - Claude Task Master Bash Wrapper
 # ============================================================================
 #
 # This script wraps the Python CLI to:
 # 1. Load configuration from .claude-task-master/config.json
-# 2. Set environment variables before invoking Python
+# 2. Set environment variables BEFORE invoking Python
 # 3. Provide a consistent entry point across different installation methods
 #
-# Environment Variables (set from config.json if present):
-#   ANTHROPIC_API_KEY     - Anthropic API key
-#   ANTHROPIC_BASE_URL    - Anthropic API base URL
-#   OPENROUTER_API_KEY    - OpenRouter API key (for alternative providers)
-#   OPENROUTER_BASE_URL   - OpenRouter API base URL
-#   CLAUDETM_MODEL_SONNET - Model name for 'sonnet' tier
-#   CLAUDETM_MODEL_OPUS   - Model name for 'opus' tier
-#   CLAUDETM_MODEL_HAIKU  - Model name for 'haiku' tier
-#   CLAUDETM_TARGET_BRANCH - Git target branch for PRs
+# 📋 Environment Variables (set from config.json if present):
+#   ANTHROPIC_API_KEY       - Anthropic API key
+#   ANTHROPIC_BASE_URL      - Anthropic API base URL (default: https://api.anthropic.com)
+#   OPENROUTER_API_KEY      - OpenRouter API key (for alternative providers)
+#   OPENROUTER_BASE_URL     - OpenRouter API base URL
+#   CLAUDETM_MODEL_SONNET   - Model name for 'sonnet' tier
+#   CLAUDETM_MODEL_OPUS     - Model name for 'opus' tier
+#   CLAUDETM_MODEL_HAIKU    - Model name for 'haiku' tier
+#   CLAUDETM_TARGET_BRANCH  - Git target branch for PRs (default: main)
 #
-# Usage:
-#   claudetm start "Your task here"
-#   claudetm status
-#   claudetm --version
-#   claudetm --help
+# 🚀 Usage:
+#   claudetm start "Your task here"    # Start autonomous task
+#   claudetm status                    # Check task progress
+#   claudetm --version                 # Show version info
+#   claudetm --init-config             # Create default config.json
+#   claudetm --help                    # Show all commands
+#
+# 📚 Documentation: https://github.com/sebyx07/claude-task-master-py
 #
 # ============================================================================
 
 set -euo pipefail
 
-# Script version (should match Python package version)
+# Script version - synchronized with Python package version
+# This should be kept in sync using scripts/sync_version.py
 SCRIPT_VERSION="0.1.0"
 
 # Configuration file location
 CONFIG_DIR=".claude-task-master"
 CONFIG_FILE="${CONFIG_DIR}/config.json"
 
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+BOLD='\033[1m'
+
 # ============================================================================
 # Helper Functions
 # ============================================================================
 
-# Print error message to stderr
+# Print error message to stderr (in red)
 error() {
-    echo "[claudetm] ERROR: $*" >&2
+    echo -e "${RED}${BOLD}[claudetm] ❌ ERROR:${NC} $*" >&2
 }
 
-# Print warning message to stderr
+# Print warning message to stderr (in yellow)
 warn() {
-    echo "[claudetm] WARNING: $*" >&2
+    echo -e "${YELLOW}[claudetm] ⚠️  WARNING:${NC} $*" >&2
 }
 
-# Print info message to stderr (only if verbose)
+# Print success message (in green)
+success() {
+    echo -e "${GREEN}[claudetm] ✅${NC} $*"
+}
+
+# Print info message (in blue)
+info() {
+    echo -e "${BLUE}[claudetm]${NC} $*"
+}
+
+# Print debug message to stderr (only if verbose)
 debug() {
     if [[ "${CLAUDETM_DEBUG:-}" == "1" ]]; then
-        echo "[claudetm] DEBUG: $*" >&2
+        echo -e "${BLUE}[claudetm] 🔍 DEBUG:${NC} $*" >&2
     fi
 }
 
@@ -191,29 +213,180 @@ load_config() {
 find_python() {
     # First, check if claudetm-py is available (installed via pip/uv tool install)
     if command_exists claudetm-py; then
+        debug "Found claudetm-py in PATH"
         echo "claudetm-py"
         return 0
     fi
 
     # Try to use uv if available (recommended for development)
     if command_exists uv; then
+        debug "Using uv run for Python invocation"
         echo "uv run python -m claude_task_master.cli"
         return 0
     fi
 
     # Fall back to direct Python invocation
     if command_exists python3; then
+        debug "Using python3 -m for invocation"
         echo "python3 -m claude_task_master.cli"
         return 0
     fi
 
     if command_exists python; then
+        debug "Using python -m for invocation"
         echo "python -m claude_task_master.cli"
         return 0
     fi
 
-    error "No Python interpreter found. Please install Python 3.10+ or uv."
+    error "No Python interpreter found!"
+    echo ""
+    echo "Please install one of the following:" >&2
+    echo "  • Python 3.10+ (https://www.python.org/downloads/)" >&2
+    echo "  • uv (recommended): curl -LsSf https://astral.sh/uv/install.sh | sh" >&2
+    echo "" >&2
+    echo "Then install claude-task-master:" >&2
+    echo "  uv tool install claude-task-master" >&2
+    echo "  # or: pip install claude-task-master" >&2
     return 1
+}
+
+# ============================================================================
+# Configuration Initialization
+# ============================================================================
+
+# Generate default config.json file
+# Uses Python to generate the proper default config
+generate_default_config() {
+    local config_path="$1"
+    local python_cmd
+
+    # Find Python
+    if command_exists python3; then
+        python_cmd="python3"
+    elif command_exists python; then
+        python_cmd="python"
+    else
+        error "Python is required to generate config.json"
+        return 1
+    fi
+
+    # Create directory if needed
+    mkdir -p "$(dirname "$config_path")"
+
+    # Generate config using Python
+    $python_cmd << 'PYTHON_SCRIPT'
+import json
+import sys
+
+# Default configuration matching config.py schema
+default_config = {
+    "version": "1.0",
+    "api": {
+        "anthropic_api_key": None,
+        "anthropic_base_url": "https://api.anthropic.com",
+        "openrouter_api_key": None,
+        "openrouter_base_url": "https://openrouter.ai/api/v1"
+    },
+    "models": {
+        "sonnet": "claude-sonnet-4-5-20250929",
+        "opus": "claude-opus-4-5-20251101",
+        "haiku": "claude-haiku-4-5-20251001"
+    },
+    "git": {
+        "target_branch": "main",
+        "auto_push": True
+    },
+    "tools": {
+        "planning": ["Read", "Glob", "Grep", "Bash"],
+        "verification": ["Read", "Glob", "Grep", "Bash"],
+        "working": []
+    }
+}
+
+print(json.dumps(default_config, indent=2))
+PYTHON_SCRIPT
+}
+
+# Initialize config.json if it doesn't exist
+init_config() {
+    local force="${1:-false}"
+
+    if [[ -f "$CONFIG_FILE" ]] && [[ "$force" != "true" ]]; then
+        warn "Config file already exists: $CONFIG_FILE"
+        echo ""
+        echo "Use --init-config --force to overwrite it."
+        echo "Or edit it directly: $CONFIG_FILE"
+        return 1
+    fi
+
+    info "Creating default configuration..."
+
+    # Create directory
+    mkdir -p "$CONFIG_DIR"
+
+    # Generate and write config
+    if generate_default_config "$CONFIG_FILE" > "$CONFIG_FILE"; then
+        success "Created config file: $CONFIG_FILE"
+        echo ""
+        echo "📝 You can now customize your configuration:"
+        echo "   • Set API keys (or use environment variables)"
+        echo "   • Override model names for OpenRouter/other providers"
+        echo "   • Configure target branch for PRs"
+        echo ""
+        echo "📖 See documentation: https://github.com/sebyx07/claude-task-master-py#configuration"
+        return 0
+    else
+        error "Failed to create config file"
+        return 1
+    fi
+}
+
+# ============================================================================
+# Version Information
+# ============================================================================
+
+# Get Python package version (if available)
+get_python_version() {
+    local python_cmd
+
+    # Try to get version from installed package
+    if command_exists claudetm-py; then
+        claudetm-py --version 2>/dev/null | head -1 || echo ""
+        return 0
+    fi
+
+    # Try with uv
+    if command_exists uv; then
+        uv run python -c "from claude_task_master import __version__; print(f'claude-task-master {__version__}')" 2>/dev/null || echo ""
+        return 0
+    fi
+
+    # Try with python3
+    if command_exists python3; then
+        python3 -c "from claude_task_master import __version__; print(f'claude-task-master {__version__}')" 2>/dev/null || echo ""
+        return 0
+    fi
+
+    echo ""
+}
+
+# Show version information
+show_version() {
+    echo -e "${BOLD}🤖 Claude Task Master${NC}"
+    echo ""
+    echo "  Bash wrapper: v$SCRIPT_VERSION"
+
+    local python_version
+    python_version=$(get_python_version)
+    if [[ -n "$python_version" ]]; then
+        echo "  Python package: $python_version"
+    else
+        echo "  Python package: (not detected)"
+    fi
+
+    echo ""
+    echo "📚 Documentation: https://github.com/sebyx07/claude-task-master-py"
+    echo "🐛 Issues: https://github.com/sebyx07/claude-task-master-py/issues"
 }
 
 # ============================================================================
@@ -223,11 +396,7 @@ find_python() {
 main() {
     # Handle --version flag specially (before loading config)
     if [[ "${1:-}" == "--version" ]] || [[ "${1:-}" == "-V" ]]; then
-        echo "claudetm version $SCRIPT_VERSION (bash wrapper)"
-        # Also run Python version for full info
-        local python_cmd
-        python_cmd=$(find_python) || exit 1
-        $python_cmd --version 2>/dev/null || true
+        show_version
         exit 0
     fi
 
@@ -237,34 +406,91 @@ main() {
         exit 0
     fi
 
+    # Handle --init-config (creates default config.json)
+    if [[ "${1:-}" == "--init-config" ]]; then
+        local force="false"
+        if [[ "${2:-}" == "--force" ]] || [[ "${2:-}" == "-f" ]]; then
+            force="true"
+        fi
+        init_config "$force"
+        exit $?
+    fi
+
     # Handle --show-config (debug: shows loaded config as env vars)
     if [[ "${1:-}" == "--show-config" ]]; then
         # Load config first so we can show the values
         if [[ -f "$CONFIG_FILE" ]]; then
             load_config "$CONFIG_FILE"
         fi
-        echo "Configuration Environment Variables:"
-        echo "  ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-(not set)}"
-        echo "  ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-(not set)}"
-        echo "  OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-(not set)}"
-        echo "  OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-(not set)}"
-        echo "  CLAUDETM_MODEL_SONNET=${CLAUDETM_MODEL_SONNET:-(not set)}"
-        echo "  CLAUDETM_MODEL_OPUS=${CLAUDETM_MODEL_OPUS:-(not set)}"
-        echo "  CLAUDETM_MODEL_HAIKU=${CLAUDETM_MODEL_HAIKU:-(not set)}"
-        echo "  CLAUDETM_TARGET_BRANCH=${CLAUDETM_TARGET_BRANCH:-(not set)}"
+
+        echo -e "${BOLD}📋 Configuration Environment Variables${NC}"
         echo ""
-        echo "Config file: $CONFIG_FILE"
+        echo "  API Settings:"
+        echo "    ANTHROPIC_API_KEY     = ${ANTHROPIC_API_KEY:-(not set)}"
+        echo "    ANTHROPIC_BASE_URL    = ${ANTHROPIC_BASE_URL:-(not set)}"
+        echo "    OPENROUTER_API_KEY    = ${OPENROUTER_API_KEY:-(not set)}"
+        echo "    OPENROUTER_BASE_URL   = ${OPENROUTER_BASE_URL:-(not set)}"
+        echo ""
+        echo "  Model Settings:"
+        echo "    CLAUDETM_MODEL_SONNET = ${CLAUDETM_MODEL_SONNET:-(not set)}"
+        echo "    CLAUDETM_MODEL_OPUS   = ${CLAUDETM_MODEL_OPUS:-(not set)}"
+        echo "    CLAUDETM_MODEL_HAIKU  = ${CLAUDETM_MODEL_HAIKU:-(not set)}"
+        echo ""
+        echo "  Git Settings:"
+        echo "    CLAUDETM_TARGET_BRANCH = ${CLAUDETM_TARGET_BRANCH:-(not set)}"
+        echo ""
+        echo "  Config file: $CONFIG_FILE"
         if [[ -f "$CONFIG_FILE" ]]; then
-            echo "Config file status: EXISTS"
+            echo -e "  Status: ${GREEN}EXISTS${NC}"
         else
-            echo "Config file status: NOT FOUND"
+            echo -e "  Status: ${YELLOW}NOT FOUND${NC} (using defaults)"
+            echo ""
+            echo "  💡 Tip: Run 'claudetm --init-config' to create a config file"
         fi
+        exit 0
+    fi
+
+    # Handle --help with enhanced information
+    if [[ "${1:-}" == "--help" ]] || [[ "${1:-}" == "-h" ]]; then
+        echo -e "${BOLD}🤖 Claude Task Master${NC} - Autonomous task orchestration"
+        echo ""
+        echo "USAGE:"
+        echo "    claudetm <COMMAND> [OPTIONS]"
+        echo ""
+        echo "COMMANDS:"
+        echo "    start <goal>          Start working on a task autonomously"
+        echo "    status                Show current task status"
+        echo "    plan                  Display the task plan"
+        echo "    logs                  Show recent log entries"
+        echo "    progress              Display progress summary"
+        echo "    context               Show accumulated context"
+        echo "    clean                 Clean up state directory"
+        echo "    doctor                Check system configuration"
+        echo ""
+        echo "OPTIONS:"
+        echo "    --version, -V         Show version information"
+        echo "    --help, -h            Show this help message"
+        echo "    --init-config         Create default config.json"
+        echo "    --show-config         Show current configuration"
+        echo ""
+        echo "CONFIGURATION:"
+        echo "    Config file: .claude-task-master/config.json"
+        echo "    Run 'claudetm --init-config' to create a default config"
+        echo ""
+        echo "EXAMPLES:"
+        echo "    claudetm start \"Implement user authentication\""
+        echo "    claudetm start \"Fix bug in login form\" --max-sessions 5"
+        echo "    claudetm status"
+        echo ""
+        echo "📚 Full documentation: https://github.com/sebyx07/claude-task-master-py"
         exit 0
     fi
 
     # Load configuration from project config file
     if [[ -f "$CONFIG_FILE" ]]; then
         load_config "$CONFIG_FILE"
+    else
+        debug "No config file found, using defaults"
     fi
 
     # Find Python command
