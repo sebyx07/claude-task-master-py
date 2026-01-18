@@ -409,30 +409,50 @@ def fix_pr(
             # All done!
             console.print("\n[bold green]✓ CI passed and all comments resolved![/bold green]")
 
+            if no_merge:
+                console.print(
+                    f"\n[green]PR #{pr_number} is ready to merge (--no-merge specified)[/green]"
+                )
+                state_manager.release_session_lock()
+                raise typer.Exit(0)
+
+            # Wait for mergeable status if UNKNOWN (GitHub needs time to compute)
+            merge_attempts = 0
+            max_merge_attempts = 6  # 60 seconds total
+            while status.mergeable == "UNKNOWN" and merge_attempts < max_merge_attempts:
+                merge_attempts += 1
+                console.print(
+                    f"  ⏳ Waiting for mergeable status... ({merge_attempts}/{max_merge_attempts})"
+                )
+                time.sleep(CI_POLL_INTERVAL)
+                status = github_client.get_pr_status(pr_number)
+
             # Check if ready to merge
             if status.mergeable == "MERGEABLE" or status.mergeable is None:
-                if no_merge:
+                console.print(f"\n[bold]Merging PR #{pr_number}...[/bold]")
+                try:
+                    github_client.merge_pr(pr_number)
                     console.print(
-                        f"\n[green]PR #{pr_number} is ready to merge (--no-merge specified)[/green]"
+                        f"[bold green]✓ PR #{pr_number} merged successfully![/bold green]"
                     )
-                else:
-                    console.print(f"\n[bold]Merging PR #{pr_number}...[/bold]")
-                    try:
-                        github_client.merge_pr(pr_number)
-                        console.print(
-                            f"[bold green]✓ PR #{pr_number} merged successfully![/bold green]"
-                        )
-                    except Exception as e:
-                        console.print(f"[red]Merge failed: {e}[/red]")
-                        console.print("You can merge manually.")
+                except Exception as e:
+                    console.print(f"[red]Merge failed: {e}[/red]")
+                    console.print("You can merge manually.")
+                    state_manager.release_session_lock()
+                    raise typer.Exit(1) from None
             elif status.mergeable == "CONFLICTING":
                 console.print(
                     f"\n[yellow]PR #{pr_number} has merge conflicts - manual resolution required[/yellow]"
                 )
+                state_manager.release_session_lock()
+                raise typer.Exit(1)
             else:
                 console.print(
-                    f"\n[yellow]PR #{pr_number} mergeable status: {status.mergeable}[/yellow]"
+                    f"\n[yellow]PR #{pr_number} mergeable status: {status.mergeable} after {max_merge_attempts} attempts[/yellow]"
                 )
+                console.print("You can merge manually.")
+                state_manager.release_session_lock()
+                raise typer.Exit(1)
 
             state_manager.release_session_lock()
             raise typer.Exit(0)
