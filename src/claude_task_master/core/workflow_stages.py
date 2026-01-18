@@ -59,11 +59,12 @@ class WorkflowStageHandler:
             return None
 
     @staticmethod
-    def _checkout_branch(branch: str) -> bool:
-        """Checkout to a branch.
+    def _checkout_branch(branch: str, allow_recovery: bool = True) -> bool:
+        """Checkout to a branch with optional recovery from dirty state.
 
         Args:
             branch: Branch name to checkout.
+            allow_recovery: If True, attempts recovery on failure (stash changes).
 
         Returns:
             True if successful, False otherwise.
@@ -83,8 +84,47 @@ class WorkflowStageHandler:
             )
             return True
         except subprocess.CalledProcessError as e:
-            console.warning(f"Failed to checkout {branch}: {e}")
-            return False
+            if not allow_recovery:
+                console.warning(f"Failed to checkout {branch}: {e}")
+                return False
+
+            # Try recovery: stash any local changes and retry
+            console.info("Checkout failed, attempting recovery...")
+            try:
+                # Check if there are uncommitted changes
+                status = subprocess.run(
+                    ["git", "status", "--porcelain"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                if status.stdout.strip():
+                    console.info("Stashing uncommitted changes...")
+                    subprocess.run(
+                        ["git", "stash", "push", "-m", "claudetm: auto-stash before checkout"],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+
+                # Retry checkout
+                subprocess.run(
+                    ["git", "checkout", branch],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                subprocess.run(
+                    ["git", "pull"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                console.success("Recovery successful (changes stashed)")
+                return True
+            except subprocess.CalledProcessError as recovery_error:
+                console.warning(f"Failed to checkout {branch} after recovery: {recovery_error}")
+                return False
 
     def __init__(
         self,
@@ -492,10 +532,17 @@ After addressing ALL comments and creating the resolution file, end with: TASK C
 
             # Checkout to base branch to avoid conflicts on next task
             console.info(f"Checking out to {base_branch}...")
-            if self._checkout_branch(base_branch):
-                console.success(f"Switched to {base_branch}")
-            else:
-                console.warning(f"Could not checkout to {base_branch}, may need manual checkout")
+            if not self._checkout_branch(base_branch):
+                # Checkout failed even after recovery - block and require manual intervention
+                console.error(f"Could not checkout to {base_branch} after PR merge")
+                console.detail("Manual intervention required:")
+                console.detail(f"  1. Run: git stash && git checkout {base_branch} && git pull")
+                console.detail("  2. Then run: claudetm resume")
+                state.status = "blocked"
+                self.state_manager.save_state(state)
+                return 1
+
+            console.success(f"Switched to {base_branch}")
 
         # Move to next task
         state.current_task_index += 1

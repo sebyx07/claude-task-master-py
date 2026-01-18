@@ -961,7 +961,7 @@ class TestHandleMergedStage:
         mock_checkout.assert_called_once_with("develop")
 
     @patch("claude_task_master.core.workflow_stages.console")
-    def test_checkout_failure_continues(
+    def test_checkout_failure_blocks(
         self,
         mock_console,
         workflow_handler,
@@ -970,7 +970,7 @@ class TestHandleMergedStage:
         mock_github_client,
         mock_pr_status,
     ):
-        """Should continue even if checkout fails."""
+        """Should block workflow if checkout fails after PR merge."""
         state_manager.state_dir.mkdir(exist_ok=True)
         state_manager.save_plan("- [ ] Task 1")
         basic_task_state.current_pr = 42
@@ -981,9 +981,10 @@ class TestHandleMergedStage:
         with patch.object(WorkflowStageHandler, "_checkout_branch", return_value=False):
             result = workflow_handler.handle_merged_stage(basic_task_state, mark_fn)
 
-        assert result is None
-        assert basic_task_state.workflow_stage == "working"
-        mock_console.warning.assert_called()
+        # Should block instead of continuing
+        assert result == 1
+        assert basic_task_state.status == "blocked"
+        mock_console.error.assert_called()
 
     @patch("claude_task_master.core.workflow_stages.console")
     def test_no_plan_continues(
