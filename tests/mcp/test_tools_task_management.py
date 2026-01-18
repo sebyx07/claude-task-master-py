@@ -307,3 +307,113 @@ class TestResumeTaskTool:
         state_manager = StateManager(state_dir=state_dir)
         progress = state_manager.load_progress() or ""
         assert "Resumed" in progress
+
+
+class TestUpdateConfigTool:
+    """Test the update_config MCP tool."""
+
+    def test_update_config_no_active_task(self, temp_dir):
+        """Test update_config when no task exists."""
+        from claude_task_master.mcp.tools import update_config
+
+        result = update_config(temp_dir, max_sessions=10)
+        assert result["success"] is False
+        assert "No active task found" in result["message"]
+
+    def test_update_config_no_options_provided(self, initialized_state, state_dir):
+        """Test update_config when no options are provided."""
+        from claude_task_master.mcp.tools import update_config
+
+        result = update_config(state_dir.parent, state_dir=str(state_dir))
+        assert result["success"] is False
+        assert "No configuration options provided" in result["message"]
+
+    def test_update_config_single_option(self, initialized_state, state_dir):
+        """Test update_config updates a single option."""
+        from claude_task_master.mcp.tools import update_config
+
+        # Note: initialized_state fixture sets max_sessions=10 by default,
+        # so we use a different value here (20)
+        result = update_config(
+            state_dir.parent,
+            max_sessions=20,
+            state_dir=str(state_dir),
+        )
+        assert result["success"] is True
+        assert "max_sessions" in result["message"]
+        assert result["updated"]["max_sessions"] == 20
+
+        # Verify state was updated
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        assert state.options.max_sessions == 20
+
+    def test_update_config_multiple_options(self, initialized_state, state_dir):
+        """Test update_config updates multiple options."""
+        from claude_task_master.mcp.tools import update_config
+
+        result = update_config(
+            state_dir.parent,
+            max_sessions=5,
+            auto_merge=False,
+            pause_on_pr=True,
+            state_dir=str(state_dir),
+        )
+        assert result["success"] is True
+        assert result["updated"]["max_sessions"] == 5
+        assert result["updated"]["auto_merge"] is False
+        assert result["updated"]["pause_on_pr"] is True
+
+        # Verify state was updated
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        assert state.options.max_sessions == 5
+        assert state.options.auto_merge is False
+        assert state.options.pause_on_pr is True
+
+    def test_update_config_no_change_when_same_value(self, initialized_state, state_dir):
+        """Test update_config reports no change when value is already set."""
+        from claude_task_master.mcp.tools import update_config
+
+        # Initial state has auto_merge=True by default
+        result = update_config(
+            state_dir.parent,
+            auto_merge=True,
+            state_dir=str(state_dir),
+        )
+        assert result["success"] is True
+        # Updated should be empty dict since value didn't change
+        assert result["updated"] == {}
+        assert "No configuration changes needed" in result["message"]
+
+    def test_update_config_log_level(self, initialized_state, state_dir):
+        """Test update_config updates log_level option."""
+        from claude_task_master.mcp.tools import update_config
+
+        result = update_config(
+            state_dir.parent,
+            log_level="verbose",
+            state_dir=str(state_dir),
+        )
+        assert result["success"] is True
+        assert result["updated"]["log_level"] == "verbose"
+
+        # Verify state was updated
+        state_manager = StateManager(state_dir=state_dir)
+        state = state_manager.load_state()
+        assert state.options.log_level == "verbose"
+
+    def test_update_config_returns_current_config(self, initialized_state, state_dir):
+        """Test update_config returns current configuration in response."""
+        from claude_task_master.mcp.tools import update_config
+
+        result = update_config(
+            state_dir.parent,
+            max_sessions=15,
+            state_dir=str(state_dir),
+        )
+        assert result["success"] is True
+        assert result["current"] is not None
+        assert "auto_merge" in result["current"]
+        assert "max_sessions" in result["current"]
+        assert result["current"]["max_sessions"] == 15

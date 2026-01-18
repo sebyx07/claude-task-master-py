@@ -107,6 +107,16 @@ class ResumeTaskResult(BaseModel):
     new_status: str | None = None
 
 
+class UpdateConfigResult(BaseModel):
+    """Result from update_config tool."""
+
+    success: bool
+    message: str
+    updated: dict[str, bool | int | str | None] | None = None
+    current: dict[str, bool | int | str | None] | None = None
+    error: str | None = None
+
+
 # =============================================================================
 # Tool Implementations
 # =============================================================================
@@ -689,6 +699,93 @@ def resume_task(
         return ResumeTaskResult(
             success=False,
             message=f"Failed to resume task: {e}",
+        ).model_dump()
+
+
+def update_config(
+    work_dir: Path,
+    auto_merge: bool | None = None,
+    max_sessions: int | None = None,
+    pause_on_pr: bool | None = None,
+    enable_checkpointing: bool | None = None,
+    log_level: str | None = None,
+    log_format: str | None = None,
+    pr_per_task: bool | None = None,
+    state_dir: str | None = None,
+) -> dict[str, Any]:
+    """Update task configuration options at runtime.
+
+    Updates the TaskOptions stored in the task state. Only specified
+    options are updated; others retain their current values.
+
+    Args:
+        work_dir: Working directory for the server.
+        auto_merge: Whether to auto-merge PRs when approved.
+        max_sessions: Maximum number of work sessions before pausing.
+        pause_on_pr: Whether to pause after creating PR for manual review.
+        enable_checkpointing: Whether to enable state checkpointing.
+        log_level: Log level (quiet, normal, verbose).
+        log_format: Log format (text, json).
+        pr_per_task: Whether to create PR per task vs per group.
+        state_dir: Optional custom state directory path.
+
+    Returns:
+        Dictionary indicating success or failure with updated config details.
+    """
+    state_path = Path(state_dir) if state_dir else work_dir / ".claude-task-master"
+    state_manager = StateManager(state_dir=state_path)
+    control_manager = ControlManager(state_manager=state_manager)
+
+    # Build kwargs from provided options (only non-None values)
+    kwargs: dict[str, bool | int | str | None] = {}
+    if auto_merge is not None:
+        kwargs["auto_merge"] = auto_merge
+    if max_sessions is not None:
+        kwargs["max_sessions"] = max_sessions
+    if pause_on_pr is not None:
+        kwargs["pause_on_pr"] = pause_on_pr
+    if enable_checkpointing is not None:
+        kwargs["enable_checkpointing"] = enable_checkpointing
+    if log_level is not None:
+        kwargs["log_level"] = log_level
+    if log_format is not None:
+        kwargs["log_format"] = log_format
+    if pr_per_task is not None:
+        kwargs["pr_per_task"] = pr_per_task
+
+    # If no options provided, return error
+    if not kwargs:
+        return UpdateConfigResult(
+            success=False,
+            message="No configuration options provided",
+            error="At least one configuration option must be specified",
+        ).model_dump()
+
+    try:
+        result = control_manager.update_config(**kwargs)
+        return UpdateConfigResult(
+            success=True,
+            message=result.message,
+            updated=result.details.get("updated") if result.details else None,
+            current=result.details.get("current") if result.details else None,
+        ).model_dump()
+    except NoActiveTaskError:
+        return UpdateConfigResult(
+            success=False,
+            message="No active task found. Initialize a task first.",
+            error="No task state exists",
+        ).model_dump()
+    except ValueError as e:
+        return UpdateConfigResult(
+            success=False,
+            message=str(e),
+            error="Invalid configuration option",
+        ).model_dump()
+    except Exception as e:
+        return UpdateConfigResult(
+            success=False,
+            message=f"Failed to update configuration: {e}",
+            error=str(e),
         ).model_dump()
 
 
