@@ -376,12 +376,12 @@ class TestControlManagerStop:
         assert result.success is True
         assert result.operation == "stop"
         assert result.previous_status == "working"
-        assert result.new_status == "failed"
+        assert result.new_status == "stopped"
         assert "stopped successfully" in result.message
 
         # Verify state was updated
         state = initialized_state_manager.load_state()
-        assert state.status == "failed"
+        assert state.status == "stopped"
 
     def test_stop_planning_task(self, initialized_state_manager):
         """Test stopping a task in planning phase."""

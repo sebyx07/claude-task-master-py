@@ -305,10 +305,9 @@ class ControlManager:
         shutdown_reason = reason or "stop requested"
         request_shutdown(shutdown_reason)
 
-        # Transition to failed (which is the closest terminal state for a stopped task)
-        # Note: A future PR will add a "stopped" status for cleaner semantics
-        state.status = "failed"
-        self.state_manager.save_state(state, validate_transition=False)
+        # Transition to stopped (can be resumed or failed from this state)
+        state.status = "stopped"
+        self.state_manager.save_state(state)
 
         # Append reason to progress if provided
         if reason:
@@ -325,7 +324,7 @@ class ControlManager:
             success=True,
             operation="stop",
             previous_status=previous_status,
-            new_status="failed",
+            new_status="stopped",
             message=f"Task stopped successfully (was {previous_status})",
             details={"reason": reason, "cleanup": cleanup},
         )
