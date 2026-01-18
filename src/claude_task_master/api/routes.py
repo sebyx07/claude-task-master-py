@@ -11,6 +11,7 @@ Endpoints:
 - GET /context: Get accumulated context/learnings
 - GET /health: Health check endpoint
 - POST /control/stop: Stop a running task with optional cleanup
+- POST /control/resume: Resume a paused or blocked task
 
 Usage:
     from claude_task_master.api.routes import create_info_router, create_control_router
@@ -38,6 +39,7 @@ from claude_task_master.api.models import (
     LogsResponse,
     PlanResponse,
     ProgressResponse,
+    ResumeRequest,
     StopRequest,
     TaskOptionsResponse,
     TaskProgressInfo,
@@ -554,7 +556,7 @@ def create_control_router() -> APIRouter:
     """Create router for control endpoints.
 
     These endpoints allow runtime control of task execution including
-    stopping tasks with optional cleanup.
+    stopping and resuming tasks.
 
     Returns:
         APIRouter configured with control endpoints.
@@ -648,6 +650,82 @@ def create_control_router() -> APIRouter:
                 ).model_dump(),
             )
 
+    @router.post(
+        "/control/resume",
+        response_model=ControlResponse,
+        responses={
+            400: {"model": ErrorResponse, "description": "Invalid operation for current state"},
+            404: {"model": ErrorResponse, "description": "No active task found"},
+            500: {"model": ErrorResponse, "description": "Internal server error"},
+        },
+        summary="Resume Task",
+        description="Resume a paused or blocked task.",
+    )
+    async def resume_task(
+        request: Request, resume_request: ResumeRequest
+    ) -> ControlResponse | JSONResponse:
+        """Resume a paused or blocked task.
+
+        Resumes the current task from paused or blocked status.
+        The task must be in a resumable state (paused, stopped, blocked, or working).
+
+        Returns:
+            ControlResponse with operation result.
+
+        Raises:
+            404: If no active task exists.
+            400: If the task cannot be resumed in its current state.
+            500: If an error occurs during the operation.
+        """
+        state_manager = _get_state_manager(request)
+
+        if not state_manager.exists():
+            return JSONResponse(
+                status_code=404,
+                content=ErrorResponse(
+                    error="not_found",
+                    message="No active task found",
+                    suggestion="Start a new task with 'claudetm start <goal>'",
+                ).model_dump(),
+            )
+
+        try:
+            # Create control manager and perform resume operation
+            control = ControlManager(state_manager=state_manager)
+            result = control.resume()
+
+            return ControlResponse(
+                success=result.success,
+                message=result.message,
+                operation=result.operation,
+                previous_status=result.previous_status,
+                new_status=result.new_status,
+                details=result.details,
+            )
+
+        except Exception as e:
+            logger.exception("Error resuming task")
+
+            # Check if it's a known control error
+            if "Cannot resume task" in str(e):
+                return JSONResponse(
+                    status_code=400,
+                    content=ErrorResponse(
+                        error="invalid_operation",
+                        message=str(e),
+                        suggestion="Task may be in a terminal state or already running",
+                    ).model_dump(),
+                )
+
+            return JSONResponse(
+                status_code=500,
+                content=ErrorResponse(
+                    error="internal_error",
+                    message="Failed to resume task",
+                    detail=str(e),
+                ).model_dump(),
+            )
+
     return router
 
 
@@ -674,4 +752,4 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(control_router)
 
     logger.debug("Registered info routes: /status, /plan, /logs, /progress, /context, /health")
-    logger.debug("Registered control routes: /control/stop")
+    logger.debug("Registered control routes: /control/stop, /control/resume")
