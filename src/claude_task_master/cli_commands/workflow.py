@@ -151,7 +151,7 @@ def start(
     try:
         # Initialize configuration (creates config.json with defaults if missing)
         working_dir = Path.cwd()
-        _config = initialize_config(working_dir)  # noqa: F841 - loaded for side effects
+        initialize_config(working_dir)
         console.print(
             f"[dim]Config loaded from: {working_dir / '.claude-task-master' / 'config.json'}[/dim]"
         )
