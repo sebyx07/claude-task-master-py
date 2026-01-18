@@ -117,6 +117,34 @@ class TestRunRestServer:
             mock_config.assert_called_once()
             mock_server.serve.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_run_rest_server_with_cors(self) -> None:
+        """Test REST server starts with CORS origins."""
+        mock_server = AsyncMock()
+        mock_server.serve = AsyncMock()
+
+        cors_origins = ["http://localhost:3000", "http://example.com"]
+
+        with (
+            patch("claude_task_master.api.server.create_app") as mock_create_app,
+            patch("uvicorn.Config") as mock_config,
+            patch("uvicorn.Server", return_value=mock_server),
+        ):
+            mock_create_app.return_value = MagicMock()
+
+            await _run_rest_server(
+                host="127.0.0.1",
+                port=8000,
+                working_dir=Path("/tmp"),
+                cors_origins=cors_origins,
+                log_level="debug",
+            )
+
+            # Verify create_app was called with CORS origins
+            call_kwargs = mock_create_app.call_args[1]
+            assert call_kwargs["cors_origins"] == cors_origins
+            mock_server.serve.assert_awaited_once()
+
 
 class TestRunMcpServer:
     """Tests for MCP server runner."""
@@ -151,6 +179,38 @@ class TestRunMcpServer:
             mock_config.assert_called_once()
             mock_server.serve.assert_awaited_once()
 
+    @pytest.mark.asyncio
+    async def test_run_mcp_server_streamable_http(self) -> None:
+        """Test MCP server starts with streamable-http transport."""
+        mock_server = AsyncMock()
+        mock_server.serve = AsyncMock()
+        mock_mcp = MagicMock()
+        mock_mcp.settings = MagicMock()
+
+        with (
+            patch(
+                "claude_task_master.mcp.server.create_server", return_value=mock_mcp
+            ) as mock_create,
+            patch(
+                "claude_task_master.mcp.server._get_authenticated_app",
+                return_value=MagicMock(),
+            ) as mock_get_app,
+            patch("uvicorn.Config") as mock_config,
+            patch("uvicorn.Server", return_value=mock_server),
+        ):
+            await _run_mcp_server(
+                host="127.0.0.1",
+                port=8080,
+                working_dir=Path("/tmp"),
+                transport="streamable-http",
+                log_level="debug",
+            )
+
+            mock_create.assert_called_once()
+            # Verify transport was passed to authenticated app
+            assert mock_get_app.call_args[0][1] == "streamable-http"
+            mock_server.serve.assert_awaited_once()
+
 
 class TestSetupSignalHandlers:
     """Tests for signal handler setup."""
@@ -161,6 +221,16 @@ class TestSetupSignalHandlers:
         try:
             # Should not raise
             _setup_signal_handlers(loop)
+        finally:
+            loop.close()
+
+    def test_setup_signal_handlers_not_implemented(self) -> None:
+        """Test signal handlers on platforms that don't support them (Windows)."""
+        loop = asyncio.new_event_loop()
+        try:
+            with patch.object(loop, "add_signal_handler", side_effect=NotImplementedError):
+                # Should not raise even on Windows
+                _setup_signal_handlers(loop)
         finally:
             loop.close()
 
@@ -200,6 +270,32 @@ class TestRunServersAsync:
             assert rest_called
             assert mcp_called
 
+    @pytest.mark.asyncio
+    async def test_run_servers_async_handles_cancellation(self) -> None:
+        """Test that cancellation is handled gracefully."""
+
+        # Create mock coroutines that get cancelled
+        async def mock_rest(*args: object, **kwargs: object) -> None:
+            await asyncio.sleep(10)  # Long running task
+
+        async def mock_mcp(*args: object, **kwargs: object) -> None:
+            raise asyncio.CancelledError()
+
+        with (
+            patch("claude_task_master.server._run_rest_server", side_effect=mock_rest),
+            patch("claude_task_master.server._run_mcp_server", side_effect=mock_mcp),
+        ):
+            with pytest.raises(asyncio.CancelledError):
+                await _run_servers_async(
+                    rest_port=8000,
+                    mcp_port=8080,
+                    host="127.0.0.1",
+                    working_dir=Path("/tmp"),
+                    mcp_transport="sse",
+                    cors_origins=None,
+                    log_level="info",
+                )
+
 
 class TestRunServers:
     """Tests for main run_servers function."""
@@ -224,6 +320,86 @@ class TestRunServers:
                     pass
 
                 mock_loop.run_until_complete.assert_called_once()
+        finally:
+            # Restore original value
+            if original:
+                os.environ["CLAUDETM_PASSWORD"] = original
+
+    def test_run_servers_security_warning_non_localhost(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test security warning when binding to non-localhost without auth."""
+        import logging
+
+        caplog.set_level(logging.WARNING)
+
+        # Clean up any existing env var
+        original = os.environ.pop("CLAUDETM_PASSWORD", None)
+
+        try:
+            mock_loop = MagicMock()
+            mock_loop.run_until_complete = MagicMock(side_effect=KeyboardInterrupt)
+
+            with (
+                patch("claude_task_master.server.is_auth_enabled", return_value=False),
+                patch("asyncio.new_event_loop", return_value=mock_loop),
+                patch("asyncio.set_event_loop"),
+            ):
+                try:
+                    run_servers(host="0.0.0.0", log_level="warning")
+                except KeyboardInterrupt:
+                    pass
+
+                assert "network-accessible" in caplog.text
+                assert "CLAUDETM_PASSWORD" in caplog.text
+        finally:
+            # Restore original value
+            if original:
+                os.environ["CLAUDETM_PASSWORD"] = original
+
+    def test_run_servers_handles_cancelled_error(self) -> None:
+        """Test that CancelledError is handled gracefully."""
+        original = os.environ.pop("CLAUDETM_PASSWORD", None)
+
+        try:
+            mock_loop = MagicMock()
+            mock_loop.run_until_complete = MagicMock(side_effect=asyncio.CancelledError)
+
+            with (
+                patch("claude_task_master.server.is_auth_enabled", return_value=False),
+                patch("asyncio.new_event_loop", return_value=mock_loop),
+                patch("asyncio.set_event_loop"),
+            ):
+                # Should not raise
+                run_servers(log_level="error")
+
+                mock_loop.run_until_complete.assert_called_once()
+        finally:
+            # Restore original value
+            if original:
+                os.environ["CLAUDETM_PASSWORD"] = original
+
+    def test_run_servers_loop_close_exception(self) -> None:
+        """Test that exceptions during loop.close() are handled."""
+        original = os.environ.pop("CLAUDETM_PASSWORD", None)
+
+        try:
+            mock_loop = MagicMock()
+            mock_loop.run_until_complete = MagicMock(side_effect=KeyboardInterrupt)
+            mock_loop.close = MagicMock(side_effect=Exception("Close failed"))
+
+            with (
+                patch("claude_task_master.server.is_auth_enabled", return_value=False),
+                patch("asyncio.new_event_loop", return_value=mock_loop),
+                patch("asyncio.set_event_loop"),
+            ):
+                try:
+                    run_servers(log_level="error")
+                except KeyboardInterrupt:
+                    pass
+
+                # Should not raise even if close() fails
+                mock_loop.close.assert_called_once()
         finally:
             # Restore original value
             if original:
