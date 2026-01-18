@@ -16,8 +16,18 @@ pip install claude-task-master
 
 # Or with uv (recommended)
 uv tool install claude-task-master
+```
 
-# Verify setup
+### Authentication
+
+Before using claudetm, you need to authenticate with Claude:
+
+```bash
+# Run Claude CLI and login (this saves credentials that claudetm will use)
+claude
+/login
+
+# Verify claudetm can access credentials
 claudetm doctor
 ```
 
