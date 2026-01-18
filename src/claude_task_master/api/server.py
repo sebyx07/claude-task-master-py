@@ -29,15 +29,19 @@ from pathlib import Path
 from typing import Any
 
 from claude_task_master import __version__
-from claude_task_master.api.models import APIInfo, HealthResponse
+from claude_task_master.api.models import APIInfo
+from claude_task_master.api.routes import register_routes
 
 # Import FastAPI - using try/except for graceful degradation
 try:
     from fastapi import FastAPI
     from fastapi.middleware.cors import CORSMiddleware
+
+    FASTAPI_AVAILABLE = True
 except ImportError:
-    FastAPI = None
-    CORSMiddleware = None
+    FastAPI = None  # type: ignore[assignment,misc]
+    CORSMiddleware = None  # type: ignore[assignment,misc]
+    FASTAPI_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +198,7 @@ def create_app(
     _configure_cors(app, cors_origins)
 
     # ==========================================================================
-    # Core Endpoints
+    # Core Endpoints (Root endpoint only - other endpoints via routes)
     # ==========================================================================
 
     @app.get(
@@ -216,37 +220,8 @@ def create_app(
             docs_url="/docs",
         )
 
-    @app.get(
-        "/health",
-        response_model=HealthResponse,
-        summary="Health Check",
-        tags=["General"],
-    )
-    async def health() -> HealthResponse:
-        """Health check endpoint.
-
-        Returns server health information including:
-        - Server status (healthy, degraded, unhealthy)
-        - Version information
-        - Uptime in seconds
-        - Number of active tasks
-
-        This endpoint is suitable for load balancer health checks
-        and monitoring systems.
-        """
-        uptime = None
-        if hasattr(app.state, "start_time"):
-            uptime = time.time() - app.state.start_time
-
-        active_tasks = getattr(app.state, "active_tasks", 0)
-
-        return HealthResponse(
-            status="healthy",
-            version=__version__,
-            server_name="claude-task-master-api",
-            uptime_seconds=uptime,
-            active_tasks=active_tasks,
-        )
+    # Register routes from routes module
+    register_routes(app)
 
     # Log app creation
     logger.info(f"FastAPI app created with working_dir={work_dir}")

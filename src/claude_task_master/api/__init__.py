@@ -52,11 +52,11 @@ from claude_task_master.api.models import (
     WorkflowStage,
 )
 
+# Routes
+from claude_task_master.api.routes import create_info_router, register_routes
+
 # Server components
 from claude_task_master.api.server import create_app, get_app, run_server
-
-# Future imports as implemented:
-# - routes.py: API endpoint definitions
 
 __all__: list[str] = [
     # Server
@@ -90,4 +90,7 @@ __all__: list[str] = [
     "TaskDeleteResponse",
     "ErrorResponse",
     "APIInfo",
+    # Routes
+    "create_info_router",
+    "register_routes",
 ]
