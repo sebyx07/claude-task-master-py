@@ -30,7 +30,7 @@ The workflow has been tested and verified to work correctly. A test tag `v0.1.3-
 ### Image Location
 
 Published images are available at:
-```
+```text
 ghcr.io/developerz-ai/claude-task-master
 ```
 
