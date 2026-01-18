@@ -402,4 +402,4 @@ class TestRegisterControlCommands:
         for cmd_name in ["pause", "stop", "config-update"]:
             result = runner.invoke(test_app, [cmd_name, "--help"])
             assert result.exit_code == 0
-            assert cmd_name in result.stdout or cmd.replace("-", "_") in result.stdout
+            assert cmd_name in result.stdout or cmd_name.replace("-", "_") in result.stdout
