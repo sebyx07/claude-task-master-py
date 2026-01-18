@@ -7,6 +7,7 @@ following the Single Responsibility Principle (SRP). It handles:
 - Console output for tool usage and results
 """
 
+import os
 from typing import TYPE_CHECKING, Any
 
 from . import console
@@ -85,6 +86,27 @@ class MessageProcessor:
 
         return result_text
 
+    @staticmethod
+    def _relative_path(path: str) -> str:
+        """Convert an absolute path to a relative path if possible.
+
+        Args:
+            path: The path to convert.
+
+        Returns:
+            Relative path if under cwd, otherwise the original path.
+        """
+        if not path:
+            return path
+        try:
+            cwd = os.getcwd()
+            if os.path.isabs(path) and path.startswith(cwd):
+                rel = os.path.relpath(path, cwd)
+                return rel if rel else path
+            return path
+        except (ValueError, OSError):
+            return path
+
     def format_tool_detail(self, tool_name: str, tool_input: dict[str, Any]) -> str:
         """Format tool input for display.
 
@@ -109,21 +131,21 @@ class MessageProcessor:
                 cmd = cmd[:247] + "..."
             return f"→ {cmd}"
         elif tool_name == "Read":
-            path = tool_input.get("file_path", "")
+            path = self._relative_path(tool_input.get("file_path", ""))
             return f"→ {path}"
         elif tool_name == "Write":
-            path = tool_input.get("file_path", "")
+            path = self._relative_path(tool_input.get("file_path", ""))
             return f"→ {path}"
         elif tool_name == "Edit":
-            path = tool_input.get("file_path", "")
+            path = self._relative_path(tool_input.get("file_path", ""))
             return f"→ {path}"
         elif tool_name == "Glob":
             pattern = tool_input.get("pattern", "")
-            path = tool_input.get("path", ".")
+            path = self._relative_path(tool_input.get("path", "."))
             return f"→ {pattern} in {path}"
         elif tool_name == "Grep":
             pattern = tool_input.get("pattern", "")
-            path = tool_input.get("path", ".")
+            path = self._relative_path(tool_input.get("path", "."))
             return f"→ '{pattern}' in {path}"
         elif tool_name == "WebSearch":
             query = tool_input.get("query", "")
