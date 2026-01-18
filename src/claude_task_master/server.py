@@ -304,7 +304,9 @@ def run_servers(
         CLAUDETM_MCP_TRANSPORT: Default MCP transport (sse).
 
     Example:
-        >>> run_servers(password="secret", rest_port=8000, mcp_port=8080)
+        >>> import os
+        >>> os.environ["CLAUDETM_PASSWORD"] = "secret"
+        >>> run_servers(rest_port=8000, mcp_port=8080)
 
     Security:
         - When binding to non-localhost addresses, password authentication should be enabled
