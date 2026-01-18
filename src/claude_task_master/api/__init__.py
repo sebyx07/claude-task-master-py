@@ -1,13 +1,15 @@
 """REST API layer for Claude Task Master.
 
 This module provides a FastAPI-based REST API that exposes claudetm functionality
-as HTTP endpoints for remote task management and control operations.
+as HTTP endpoints for remote task monitoring.
 
-Key Features:
-- Status and monitoring endpoints (GET /status, /plan, /logs, /progress)
-- Control operations (POST /control/pause, /control/stop, /control/resume)
-- Configuration management (PATCH /config)
-- Task lifecycle management (POST /task/init, DELETE /task)
+Currently Implemented Endpoints:
+- GET /status: Get current task status
+- GET /plan: Get task plan content
+- GET /logs: Get log content
+- GET /progress: Get progress summary
+- GET /context: Get accumulated context/learnings
+- GET /health: Health check endpoint
 
 Usage:
     # Import and create the app

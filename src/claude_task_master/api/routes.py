@@ -177,11 +177,24 @@ def create_info_router() -> APIRouter:
                     progress=f"{completed}/{total}" if total > 0 else "No tasks",
                 )
 
-            # Convert status and workflow_stage to enums
-            status_enum = TaskStatus(state.status)
-            workflow_stage_enum = (
-                WorkflowStage(state.workflow_stage) if state.workflow_stage else None
-            )
+            # Convert status and workflow_stage to enums with defensive error handling
+            try:
+                status_enum = TaskStatus(state.status)
+            except ValueError as e:
+                logger.error(f"Invalid status value '{state.status}' in persisted state")
+                raise ValueError(f"Corrupted state: invalid status '{state.status}'") from e
+
+            workflow_stage_enum = None
+            if state.workflow_stage:
+                try:
+                    workflow_stage_enum = WorkflowStage(state.workflow_stage)
+                except ValueError as e:
+                    logger.error(
+                        f"Invalid workflow_stage value '{state.workflow_stage}' in persisted state"
+                    )
+                    raise ValueError(
+                        f"Corrupted state: invalid workflow_stage '{state.workflow_stage}'"
+                    ) from e
 
             return TaskStatusResponse(
                 success=True,

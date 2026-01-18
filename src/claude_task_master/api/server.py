@@ -280,17 +280,29 @@ def run_server(
             "Ensure proper authentication is configured."
         )
 
-    # Create the app
-    app = create_app(working_dir=working_dir, cors_origins=cors_origins)
+    if reload:
+        # Reload mode requires import string with factory so uvicorn can spawn
+        # reload subprocesses. Passing an app instance disables reload silently.
+        uvicorn.run(
+            "claude_task_master.api.server:get_app",
+            factory=True,
+            host=effective_host,
+            port=effective_port,
+            reload=True,
+            log_level=log_level,
+        )
+    else:
+        # Create the app directly for non-reload mode
+        app = create_app(working_dir=working_dir, cors_origins=cors_origins)
 
-    # Run with uvicorn
-    uvicorn.run(
-        app,
-        host=effective_host,
-        port=effective_port,
-        reload=reload,
-        log_level=log_level,
-    )
+        # Run with uvicorn
+        uvicorn.run(
+            app,
+            host=effective_host,
+            port=effective_port,
+            reload=False,
+            log_level=log_level,
+        )
 
 
 # =============================================================================
