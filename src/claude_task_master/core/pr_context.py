@@ -72,15 +72,18 @@ class PRContextManager:
         except Exception as e:
             console.warning(f"Could not save CI failures: {e}")
 
-    def save_pr_comments(self, pr_number: int | None, *, _also_save_ci: bool = True) -> None:
+    def save_pr_comments(self, pr_number: int | None, *, _also_save_ci: bool = True) -> int:
         """Fetch and save PR comments to files for Claude to read.
 
         Args:
             pr_number: The PR number.
             _also_save_ci: Internal flag to also save CI failures (prevents recursion).
+
+        Returns:
+            Number of actionable comment files saved.
         """
         if pr_number is None:
-            return
+            return 0
 
         # Also save CI failures when saving comments (for complete context)
         if _also_save_ci:
@@ -193,9 +196,11 @@ class PRContextManager:
 
             # Save to files
             self.state_manager.save_pr_comments(pr_number, comments)
+            return len(comments)
 
         except Exception as e:
             console.warning(f"Could not save PR comments: {e}")
+            return 0
 
     def post_comment_replies(self, pr_number: int | None) -> None:
         """Post replies to comments based on resolve-comments.json.

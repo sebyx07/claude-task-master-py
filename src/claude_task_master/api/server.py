@@ -59,6 +59,45 @@ API_PORT = int(os.getenv("CLAUDETM_API_PORT", "8000"))
 # Comma-separated list of allowed origins, or "*" for all
 CORS_ORIGINS = os.getenv("CLAUDETM_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
 
+# Optional API key for authentication
+API_KEY = os.getenv("CLAUDETM_API_KEY", "")
+
+
+def _truncate_api_key(key: str) -> str:
+    """Truncate API key for safe display.
+
+    Shows first 4 and last 4 characters with ellipsis in between.
+
+    Args:
+        key: The API key to truncate.
+
+    Returns:
+        Truncated key string or "(not set)" if empty.
+    """
+    if not key:
+        return "(not set)"
+    if len(key) <= 12:
+        return key[:2] + "..." + key[-2:]
+    return key[:4] + "..." + key[-4:]
+
+
+def _log_api_config(host: str, port: int, cors_origins: list[str]) -> None:
+    """Log API configuration at startup.
+
+    Args:
+        host: The host address.
+        port: The port number.
+        cors_origins: List of CORS origins.
+    """
+    logger.info("=" * 50)
+    logger.info("API Configuration:")
+    logger.info(f"  Host: {host}")
+    logger.info(f"  Port: {port}")
+    logger.info(f"  CORS Origins: {', '.join(cors_origins) if cors_origins else '(none)'}")
+    logger.info(f"  API Key: {_truncate_api_key(API_KEY)}")
+    logger.info("=" * 50)
+
+
 # =============================================================================
 # Lifespan Context
 # =============================================================================
@@ -283,6 +322,10 @@ def run_server(
 
     effective_host = host or API_HOST
     effective_port = port or API_PORT
+    effective_cors = cors_origins if cors_origins is not None else _parse_cors_origins(CORS_ORIGINS)
+
+    # Log API configuration
+    _log_api_config(effective_host, effective_port, effective_cors)
 
     # Security warning for non-localhost binding
     if effective_host not in ("127.0.0.1", "localhost", "::1"):

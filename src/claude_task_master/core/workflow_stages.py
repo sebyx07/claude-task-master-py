@@ -272,13 +272,15 @@ After fixing, end with: TASK COMPLETE"""
             pr_status = self.github_client.get_pr_status(state.current_pr)
 
             # Check if ANY checks are still pending (CI, review bots, etc)
+            # A check is pending if: status is not terminal AND conclusion is None
             pending_checks = [
                 self._get_check_name(check)
                 for check in pr_status.check_details
-                if check.get("status", "").upper()
-                not in ("COMPLETED", "SUCCESS", "FAILURE", "ERROR", "SKIPPED")
-                or check.get("conclusion") is None
-                and check.get("status", "").upper() != "COMPLETED"
+                if (
+                    check.get("status", "").upper()
+                    not in ("COMPLETED", "SUCCESS", "FAILURE", "ERROR", "SKIPPED")
+                    and check.get("conclusion") is None
+                )
             ]
 
             if pending_checks:
@@ -335,8 +337,9 @@ After fixing, end with: TASK COMPLETE"""
         """Handle addressing reviews - run agent to fix review comments."""
         console.info("Addressing review comments...")
 
-        # Save comments to files
-        self.pr_context.save_pr_comments(state.current_pr)
+        # Save comments to files and get actual count of actionable comments
+        saved_count = self.pr_context.save_pr_comments(state.current_pr)
+        console.info(f"Saved {saved_count} actionable comment(s) for review")
 
         # Build fix prompt
         pr_dir = self.state_manager.get_pr_dir(state.current_pr) if state.current_pr else None

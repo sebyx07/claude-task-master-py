@@ -26,6 +26,7 @@ claudetm doctor
 ```bash
 # Clone and setup
 uv sync --all-extras             # Install dependencies in .venv
+./scripts/setup-hooks.sh         # Install git pre-commit hooks
 uv run claudetm doctor           # Check system (runs from .venv)
 ```
 
