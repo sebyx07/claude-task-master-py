@@ -298,15 +298,15 @@ def create_app(
     app.state.working_dir = work_dir
     app.state.include_docs = include_docs
 
-    # Configure middleware (order matters - middleware added first runs last)
-    # CORS must be added before auth so that CORS headers are added to 401/403 responses
-    _configure_cors(app, cors_origins)
-
-    # Configure authentication if password is set
-    # Auth middleware is added after CORS, so it runs before CORS in the request cycle
-    # This allows CORS to handle preflight (OPTIONS) requests without auth
+    # Configure middleware (order matters - last middleware added is outermost)
+    # Auth is added first so it runs inside CORS
+    # This ensures CORS headers are added to ALL responses including 401/403
     auth_enabled = _configure_auth(app)
     app.state.auth_enabled = auth_enabled
+
+    # CORS is added last so it wraps all responses (including auth failures)
+    # This ensures browsers receive proper CORS headers even on 401/403 responses
+    _configure_cors(app, cors_origins)
 
     # ==========================================================================
     # Core Endpoints (Root endpoint only - other endpoints via routes)
